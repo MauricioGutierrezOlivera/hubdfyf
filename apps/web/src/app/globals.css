@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-dfyf-green: #0e9f6e;
+  --color-dfyf-green-dark: #046c4e;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --surface: #f9fafb;
+  --border: #e5e7eb;
+}
+
+:root.dark {
+  --background: #022c20;
+  --foreground: #ffffff;
+  --surface: #033b2b;
+  --border: #055740;
+  --color-dfyf-green: #10b981;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
