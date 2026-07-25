@@ -95,7 +95,14 @@ export class SalesService {
     private shopifyService: ShopifyService,
   ) {}
 
+  private catalogCache = new Map<string, { timestamp: number; data: any }>();
+
   async getPOSCatalog(storeId: string) {
+    const cached = this.catalogCache.get(storeId);
+    if (cached && Date.now() - cached.timestamp < 60_000) {
+      return cached.data;
+    }
+
     const inventoryItems = await this.prisma.inventory.findMany({
       where: { 
         storeId,
@@ -103,8 +110,19 @@ export class SalesService {
           status: 'active',
         },
       },
-      include: {
-        product: true,
+      select: {
+        quantity: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            family: true,
+            size: true,
+            price: true,
+            imageUrl: true,
+            shopifyId: true,
+          },
+        },
       },
     });
 
@@ -120,7 +138,7 @@ export class SalesService {
     >();
 
     for (const item of inventoryItems) {
-      const p = (item as any).product;
+      const p = item.product;
       if (!grouped.has(p.name)) {
         grouped.set(p.name, {
           name: p.name,
@@ -144,6 +162,7 @@ export class SalesService {
       item.variants.sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
     }
 
+    this.catalogCache.set(storeId, { timestamp: Date.now(), data: result });
     return result;
   }
 
@@ -480,6 +499,8 @@ export class SalesService {
         syncResults.push({ variantId: adj.shopifyVariantId, success: false, error: e.message });
       }
     }
+
+    this.catalogCache.delete(storeId);
 
     return {
       ...sale,
