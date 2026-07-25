@@ -1,0 +1,178 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Country {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique // e.g. "CL"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores    Store[]
+  users     User[]   // Admins of this country
+}
+
+model Store {
+  id          String   @id @default(uuid())
+  name        String
+  address     String?
+  countryId   String
+  country     Country  @relation(fields: [countryId], references: [id])
+  
+  // Shopify Connection details for this store (Client Credentials)
+  shopifyUrl          String?
+  shopifyClientId     String?
+  shopifyClientSecret String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserStore[]
+  sales       Sale[]
+  inventory   Inventory[]
+}
+
+enum Role {
+  SUPER_ADMIN
+  COUNTRY_ADMIN
+  CLERK
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(CLERK)
+  
+  // If COUNTRY_ADMIN, which country they manage
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores    UserStore[]
+  sales     Sale[]
+  goals     SalesGoal[]
+}
+
+// Join table for User-Store many-to-many relationship
+model UserStore {
+  userId  String
+  storeId String
+  user    User  @relation(fields: [userId], references: [id])
+  store   Store @relation(fields: [storeId], references: [id])
+
+  @@id([userId, storeId])
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  rut       String?  @unique
+  name      String
+  email     String?
+  phone     String?
+  
+  // Sincronización con Shopify
+  shopifyId String?  @unique
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales     Sale[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  shopifyId   String   @unique
+  sku         String?
+  name        String
+  family      String?  // Botas, Balerinas, etc.
+  color       String?
+  size        String
+  price       Float
+  status      String   @default("active")
+  imageUrl    String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inventory   Inventory[]
+  saleItems   SaleItem[]
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  storeId   String
+  productId String
+  quantity  Int      @default(0)
+
+  store     Store    @relation(fields: [storeId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([storeId, productId])
+}
+
+enum SaleType {
+  NORMAL
+  RETAIL
+  EXCHANGE
+}
+
+model Sale {
+  id            String   @id @default(uuid())
+  storeId       String
+  userId        String?  // Puede ser nulo en caso de Retail (Vendedor: DFYF)
+  customerId    String?
+  type          SaleType @default(NORMAL)
+  total         Float    @default(0)
+  notes         String?  // Ej: Regalo para amiga, Boda
+  
+  // Campos adicionales para reportes e ingesta histórica
+  date          DateTime @default(now())
+  vendedor      String?  // Beatriz, Marite, Vicky, ONLINE, EVENTO, etc.
+  channel       String?  // ONLINE, OFFLINE, EVENTO
+  paymentMethod String?
+  paymentBank   String?
+  
+  store         Store    @relation(fields: [storeId], references: [id])
+  user          User?    @relation(fields: [userId], references: [id])
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  items         SaleItem[]
+
+  createdAt     DateTime @default(now())
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String
+  productId String
+  
+  quantity  Int      // Puede ser negativo en caso de Devolución/Cambio
+  price     Float
+  discount  Float    @default(0)
+
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model SalesGoal {
+  id        String   @id @default(uuid())
+  userId    String
+  month     Int
+  year      Int
+  target    Float
+  
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month, year])
+}
