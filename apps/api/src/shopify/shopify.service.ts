@@ -140,8 +140,8 @@ export class ShopifyService implements OnModuleInit {
    * Fetch all products from Shopify (paginated).
    * Returns products with their variants (each variant = a size).
    */
-  async getProducts(limit = 50): Promise<any> {
-    return this.shopifyFetch(`products.json?limit=${limit}&status=any`);
+  async getProducts(limit = 50, status = 'active'): Promise<any> {
+    return this.shopifyFetch(`products.json?limit=${limit}&status=${status}`);
   }
 
   /**
