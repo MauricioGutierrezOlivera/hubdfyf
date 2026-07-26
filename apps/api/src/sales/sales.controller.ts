@@ -120,6 +120,23 @@ export class SalesController {
     return this.salesService.getAnalyticsReport(storeId, fY, fM, tY, tM);
   }
 
+  @Get('reports/styles')
+  async getStyleReport(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-store-id') storeId: string,
+    @Query('fromYear') fromYear?: string,
+    @Query('fromMonth') fromMonth?: string,
+    @Query('toYear') toYear?: string,
+    @Query('toMonth') toMonth?: string,
+  ) {
+    this.checkAuth(userId, storeId);
+    const fY = fromYear ? parseInt(fromYear) : undefined;
+    const fM = fromMonth ? parseInt(fromMonth) : undefined;
+    const tY = toYear ? parseInt(toYear) : undefined;
+    const tM = toMonth ? parseInt(toMonth) : undefined;
+    return this.salesService.getStyleReport(storeId, fY, fM, tY, tM);
+  }
+
   @Post('sales')
   async createSale(
     @Headers('x-user-id') userId: string,

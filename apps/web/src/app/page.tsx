@@ -65,7 +65,7 @@ export default function AppContainer() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeStore, setActiveStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles">("pos");
 
   // Login States
   const [loginEmail, setLoginEmail] = useState("");
@@ -175,6 +175,11 @@ export default function AppContainer() {
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(false);
   const [hoveredAnalyticsMonth, setHoveredAnalyticsMonth] = useState<number | null>(null);
+
+  // Style Report States (Admin Only)
+  const [styleReportData, setStyleReportData] = useState<any>(null);
+  const [isLoadingStyleReport, setIsLoadingStyleReport] = useState<boolean>(false);
+  const [stylePeriodMode, setStylePeriodMode] = useState<"ALL" | "FILTER">("ALL");
 
   // Admin Section States
   const [users, setUsers] = useState<User[]>([]);
@@ -526,6 +531,43 @@ export default function AppContainer() {
       fetchAnalyticsData();
     }
   }, [activeTab, analyticsFromYear, analyticsFromMonth, analyticsToYear, analyticsToMonth, activeStore]);
+
+  const fetchStyleReport = async () => {
+    if (!currentUser || !activeStore || currentUser.role === "CLERK") return;
+    setIsLoadingStyleReport(true);
+    try {
+      let url = `${API_BASE_URL}/admin/reports/styles`;
+      if (stylePeriodMode === "FILTER") {
+        const query = new URLSearchParams({
+          fromYear: analyticsFromYear.toString(),
+          fromMonth: analyticsFromMonth.toString(),
+          toYear: analyticsToYear.toString(),
+          toMonth: analyticsToMonth.toString(),
+        });
+        url += `?${query.toString()}`;
+      }
+      const res = await fetch(url, {
+        headers: {
+          "x-user-id": currentUser.id,
+          "x-store-id": activeStore.id,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStyleReportData(data);
+      }
+    } catch (e) {
+      console.error("Error loading style report:", e);
+    } finally {
+      setIsLoadingStyleReport(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "styles" && currentUser && activeStore && currentUser.role !== "CLERK") {
+      fetchStyleReport();
+    }
+  }, [activeTab, stylePeriodMode, analyticsFromYear, analyticsFromMonth, analyticsToYear, analyticsToMonth, activeStore, currentUser]);
 
   // Fetch admin metadata
   const fetchAdminData = async (user: User) => {
@@ -1305,7 +1347,7 @@ export default function AppContainer() {
                 : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300"
             }`}
           >
-            <span>👥 Clientes CRM</span>
+            <span>👥 Clientes</span>
           </button>
 
           <button 
@@ -1333,6 +1375,17 @@ export default function AppContainer() {
               </button>
 
               <button 
+                onClick={() => setActiveTab("styles")}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  activeTab === "styles" 
+                    ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
+                    : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300"
+                }`}
+              >
+                <span>👠 Reporte por Estilo</span>
+              </button>
+
+              <button 
                 onClick={() => setActiveTab("admin")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   activeTab === "admin" 
@@ -1340,7 +1393,7 @@ export default function AppContainer() {
                     : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300"
                 }`}
               >
-                <span>⚙️ Configuración / Admin</span>
+                <span>⚙️ Configuración</span>
               </button>
             </>
           )}
@@ -2465,7 +2518,7 @@ export default function AppContainer() {
                 <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-8 shadow-sm space-y-6 relative">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">Directorio de Clientes CRM</h1>
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">Directorio de Clientes</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Base de datos limpia y unificada de clientela online y offline</p>
                   </div>
                 </div>
@@ -3525,6 +3578,286 @@ export default function AppContainer() {
                       </table>
                     </div>
                   </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* TAB 4.5: REPORTE POR ESTILOS & PLANIFICACIÓN DE PEDIDOS */}
+          {activeTab === "styles" && (() => {
+            if (currentUser?.role === "CLERK") {
+              return (
+                <div className="p-8 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 rounded-3xl border border-amber-200 font-bold">
+                  🔒 Acceso Restringido. Este reporte de planificación estratégica está disponible únicamente para Administradores.
+                </div>
+              );
+            }
+
+            if (isLoadingStyleReport) {
+              return (
+                <div className="flex items-center justify-center p-20 text-gray-500 font-bold">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-dfyf-green mr-3"></div>
+                  Cargando reporte de estilos y curva de tallas...
+                </div>
+              );
+            }
+
+            if (!styleReportData) {
+              return (
+                <div className="p-8 bg-gray-50 dark:bg-white/5 rounded-3xl text-gray-500 font-medium">
+                  No se encontraron datos para generar el reporte por estilos.
+                </div>
+              );
+            }
+
+            const { summary, styles } = styleReportData;
+
+            return (
+              <div className="h-full overflow-y-auto pr-2 pb-12 space-y-8">
+                {/* Header Title */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-8 rounded-3xl text-white shadow-xl">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black rounded-full uppercase tracking-wider">
+                        Planificación España
+                      </span>
+                      <span className="text-xs text-gray-300 font-medium">Exclusivo Admin</span>
+                    </div>
+                    <h1 className="text-2xl md:text-3xl font-black">Reporte Estratégico por Estilo & Curva de Tallas</h1>
+                    <p className="text-sm text-gray-300 mt-1 max-w-2xl font-medium">
+                      Análisis de ventas por categoría de calzado y distribución de tallas para optimizar las órdenes de compra a España cada 6 meses.
+                    </p>
+                  </div>
+
+                  {/* Period Controls */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-white/10 p-3 rounded-2xl border border-white/10">
+                    <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl">
+                      <button
+                        onClick={() => setStylePeriodMode("ALL")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                          stylePeriodMode === "ALL"
+                            ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20"
+                            : "text-gray-300 hover:text-white"
+                        }`}
+                      >
+                        🌐 Todo el Historial
+                      </button>
+                      <button
+                        onClick={() => setStylePeriodMode("FILTER")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                          stylePeriodMode === "FILTER"
+                            ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20"
+                            : "text-gray-300 hover:text-white"
+                        }`}
+                      >
+                        📅 Por Período
+                      </button>
+                    </div>
+
+                    {stylePeriodMode === "FILTER" && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-300 font-bold">Desde:</span>
+                          <select
+                            value={analyticsFromYear}
+                            onChange={(e) => setAnalyticsFromYear(parseInt(e.target.value))}
+                            className="bg-white/20 border border-white/20 text-white rounded-lg px-2 py-1 font-bold text-xs cursor-pointer"
+                          >
+                            <option value="2025" className="text-gray-900">2025</option>
+                            <option value="2026" className="text-gray-900">2026</option>
+                          </select>
+                          <select
+                            value={analyticsFromMonth}
+                            onChange={(e) => setAnalyticsFromMonth(parseInt(e.target.value))}
+                            className="bg-white/20 border border-white/20 text-white rounded-lg px-2 py-1 font-bold text-xs cursor-pointer"
+                          >
+                            <option value="1" className="text-gray-900">Ene</option>
+                            <option value="2" className="text-gray-900">Feb</option>
+                            <option value="3" className="text-gray-900">Mar</option>
+                            <option value="4" className="text-gray-900">Abr</option>
+                            <option value="5" className="text-gray-900">May</option>
+                            <option value="6" className="text-gray-900">Jun</option>
+                            <option value="7" className="text-gray-900">Jul</option>
+                            <option value="8" className="text-gray-900">Ago</option>
+                            <option value="9" className="text-gray-900">Sep</option>
+                            <option value="10" className="text-gray-900">Oct</option>
+                            <option value="11" className="text-gray-900">Nov</option>
+                            <option value="12" className="text-gray-900">Dic</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-300 font-bold">Hasta:</span>
+                          <select
+                            value={analyticsToYear}
+                            onChange={(e) => setAnalyticsToYear(parseInt(e.target.value))}
+                            className="bg-white/20 border border-white/20 text-white rounded-lg px-2 py-1 font-bold text-xs cursor-pointer"
+                          >
+                            <option value="2025" className="text-gray-900">2025</option>
+                            <option value="2026" className="text-gray-900">2026</option>
+                          </select>
+                          <select
+                            value={analyticsToMonth}
+                            onChange={(e) => setAnalyticsToMonth(parseInt(e.target.value))}
+                            className="bg-white/20 border border-white/20 text-white rounded-lg px-2 py-1 font-bold text-xs cursor-pointer"
+                          >
+                            <option value="1" className="text-gray-900">Ene</option>
+                            <option value="2" className="text-gray-900">Feb</option>
+                            <option value="3" className="text-gray-900">Mar</option>
+                            <option value="4" className="text-gray-900">Abr</option>
+                            <option value="5" className="text-gray-900">May</option>
+                            <option value="6" className="text-gray-900">Jun</option>
+                            <option value="7" className="text-gray-900">Jul</option>
+                            <option value="8" className="text-gray-900">Ago</option>
+                            <option value="9" className="text-gray-900">Sep</option>
+                            <option value="10" className="text-gray-900">Oct</option>
+                            <option value="11" className="text-gray-900">Nov</option>
+                            <option value="12" className="text-gray-900">Dic</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Summary KPI Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">Total Pares Vendidos</span>
+                    <div className="text-3xl font-black text-gray-900 dark:text-white">{summary.totalUnits.toLocaleString("es-CL")} <span className="text-sm font-bold text-gray-500">pares</span></div>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">Facturación Total Calzado</span>
+                    <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400">${summary.totalRevenue.toLocaleString("es-CL")}</div>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">Estilos Abiertos (Verano)</span>
+                      <span className="text-xs font-black px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full">{summary.openUnitsPct}%</span>
+                    </div>
+                    <div className="text-2xl font-black text-gray-900 dark:text-white">{summary.openUnits.toLocaleString("es-CL")} <span className="text-xs text-gray-500 font-bold">pares</span></div>
+                    <div className="text-xs font-bold text-gray-400 mt-1">${summary.openRevenue.toLocaleString("es-CL")}</div>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Estilos Cerrados (Invierno)</span>
+                      <span className="text-xs font-black px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-full">{summary.closedUnitsPct}%</span>
+                    </div>
+                    <div className="text-2xl font-black text-gray-900 dark:text-white">{summary.closedUnits.toLocaleString("es-CL")} <span className="text-xs text-gray-500 font-bold">pares</span></div>
+                    <div className="text-xs font-bold text-gray-400 mt-1">${summary.closedRevenue.toLocaleString("es-CL")}</div>
+                  </div>
+                </div>
+
+                {/* Proportional Bar Open vs Closed */}
+                <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Proporción de Venta: Abiertos (Verano) vs Cerrados (Invierno)</h3>
+                    <div className="flex items-center gap-4 text-xs font-bold">
+                      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                        <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Abiertos: {summary.openUnitsPct}% ({summary.openUnits} pares)
+                      </span>
+                      <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                        <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block"></span> Cerrados: {summary.closedUnitsPct}% ({summary.closedUnits} pares)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-4 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden flex">
+                    <div className="bg-amber-500 h-full transition-all duration-500" style={{ width: `${summary.openUnitsPct}%` }}></div>
+                    <div className="bg-indigo-600 h-full transition-all duration-500" style={{ width: `${summary.closedUnitsPct}%` }}></div>
+                  </div>
+                </div>
+
+                {/* Style Matrix & Size Curve Table */}
+                <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900 dark:text-white">Matriz de Curva de Tallas por Estilo</h3>
+                      <p className="text-xs text-gray-500 font-medium">Distribución porcentual de pares vendidos para la optimización de pedidos a España.</p>
+                    </div>
+                    <div className="text-xs font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200/50">
+                      💡 Las celdas destacadas en verde representan las tallas de mayor demanda (Top Sizes).
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-white/5 text-gray-500 font-black uppercase tracking-wider border-b border-gray-200 dark:border-[#055740]">
+                          <th className="p-3.5 pl-4 rounded-l-2xl">Estilo</th>
+                          <th className="p-3.5 text-right">Pares</th>
+                          <th className="p-3.5 text-right">% Mix</th>
+                          <th className="p-3.5 text-right">Facturación</th>
+                          {['35', '36', '37', '38', '39', '40', '41', '42'].map(s => (
+                            <th key={s} className="p-3.5 text-center font-black bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Talla {s}</th>
+                          ))}
+                          <th className="p-3.5 pr-4 rounded-r-2xl">Modelo Top Venta</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
+                        {styles.map((row: any, idx: number) => {
+                          const allSizes = ['35', '36', '37', '38', '39', '40', '41', '42'];
+                          const maxPct = Math.max(...allSizes.map(sz => row.sizePercentages[sz] || 0));
+
+                          return (
+                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
+                              <td className="p-3.5 pl-4 font-black text-gray-900 dark:text-white flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green inline-block"></span>
+                                {row.style}
+                              </td>
+                              <td className="p-3.5 text-right font-black text-gray-900 dark:text-white">{row.totalUnits.toLocaleString("es-CL")}</td>
+                              <td className="p-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">{row.shareOfUnitsPct}%</td>
+                              <td className="p-3.5 text-right font-black text-gray-950 dark:text-white">${row.totalRevenue.toLocaleString("es-CL")}</td>
+                              
+                              {allSizes.map(sz => {
+                                const pct = row.sizePercentages[sz] || 0;
+                                const qty = row.sizes[sz] || 0;
+                                const isTop = pct > 0 && pct === maxPct;
+
+                                return (
+                                  <td 
+                                    key={sz} 
+                                    className={`p-2 text-center font-bold transition-all ${
+                                      isTop 
+                                        ? "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-900 dark:text-emerald-200 font-black rounded-lg" 
+                                        : pct > 15 
+                                        ? "bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300"
+                                        : "text-gray-600 dark:text-gray-400"
+                                    }`}
+                                  >
+                                    <div>{qty}</div>
+                                    <div className="text-[10px] opacity-75 font-semibold">{pct}%</div>
+                                  </td>
+                                );
+                              })}
+
+                              <td className="p-3.5 pr-4 text-gray-700 dark:text-gray-300 font-bold">
+                                {row.topModels.length > 0 ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-white/10 rounded-lg text-xs">
+                                    🏆 {row.topModels[0].model} <span className="text-[10px] text-gray-500 font-normal">({row.topModels[0].units} un)</span>
+                                  </span>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Strategic Advice Banner */}
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 p-6 rounded-3xl text-amber-900 dark:text-amber-200 text-xs font-medium space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-black text-amber-800 dark:text-amber-300">
+                    💡 Recomendación para la Planificación del Próximo Pedido a España:
+                  </div>
+                  <p className="leading-relaxed">
+                    Las tallas **37 y 38** concentran históricamente más del **55%** de las ventas totales en calzado. Se recomienda ajustar la curva de pedido enviando a fábrica en España un ratio sugerido de **1-2-4-4-3-2-1** para las tallas [35-36-37-38-39-40-41] por cada lote de 17 pares.
+                  </p>
                 </div>
               </div>
             );

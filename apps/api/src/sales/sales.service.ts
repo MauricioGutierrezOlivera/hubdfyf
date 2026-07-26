@@ -1060,4 +1060,180 @@ export class SalesService {
       monthlyData,
     };
   }
+
+  async getStyleReport(
+    storeId: string,
+    fromYear?: number,
+    fromMonth?: number,
+    toYear?: number,
+    toMonth?: number,
+  ) {
+    let dateFilter: any = {};
+    if (fromYear && fromMonth && toYear && toMonth) {
+      const startDate = new Date(fromYear, fromMonth - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(toYear, toMonth, 0, 23, 59, 59, 999);
+      dateFilter = {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      };
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        storeId,
+        ...dateFilter,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    const isSockOrAcc = (name: string) =>
+      name.toLowerCase().includes('calcetin') ||
+      name.toLowerCase().includes('plantilla');
+
+    const CLOSED_STYLES = ['Blucher', 'Botín', 'Botin', 'Running'];
+
+    const styleMap = new Map<
+      string,
+      {
+        style: string;
+        totalUnits: number;
+        totalRevenue: number;
+        sizes: Record<string, number>;
+        modelsMap: Map<string, { model: string; units: number; revenue: number }>;
+      }
+    >();
+
+    let grandUnits = 0;
+    let grandRevenue = 0;
+    let openUnits = 0;
+    let openRevenue = 0;
+    let closedUnits = 0;
+    let closedRevenue = 0;
+
+    for (const sale of sales) {
+      const hasPositive = sale.items.some((it) => it.quantity > 0);
+      const hasNegative = sale.items.some((it) => it.quantity < 0);
+      const isExchange = hasPositive && hasNegative;
+      const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
+      const normVendedor = (sale.vendedor || '').toLowerCase();
+
+      for (const item of sale.items) {
+        if (item.quantity <= 0) continue;
+        if (isProductSockOrAccessory(item.product.name)) continue;
+
+        const originalPrice = item.price;
+        const discountVal = item.discount || 0;
+        const isPercent = discountVal > 0 && discountVal <= 100;
+        const discountAmount = isPercent
+          ? Math.round(originalPrice * (discountVal / 100))
+          : discountVal;
+        const salePrice = originalPrice - discountAmount;
+
+        let eventType = 'Venta';
+        if (normVendedor === 'cambio entra') {
+          eventType = 'Cambio Entra';
+        } else if (normVendedor === 'cambio sale') {
+          eventType = 'Cambio Sale';
+        } else if (normVendedor === 'regalo') {
+          eventType = 'Regalo';
+        } else if (item.quantity < 0) {
+          eventType = isExchange ? 'Cambio Entra' : 'Devolución';
+        } else {
+          if (isExchange) {
+            eventType = 'Cambio Sale';
+          } else if (isGiftSale || salePrice === 0 || discountVal === 100) {
+            eventType = 'Regalo';
+          }
+        }
+
+        if (eventType !== 'Venta') continue;
+
+        const styleName = item.product.style || item.product.family || 'Calzado General';
+        const size = item.product.size || 'UN';
+        const modelName = item.product.name.split('(')[0].trim();
+        const itemNet = (item.price - (item.discount || 0)) * item.quantity;
+
+        grandUnits += item.quantity;
+        grandRevenue += itemNet;
+
+        if (CLOSED_STYLES.includes(styleName)) {
+          closedUnits += item.quantity;
+          closedRevenue += itemNet;
+        } else {
+          openUnits += item.quantity;
+          openRevenue += itemNet;
+        }
+
+        if (!styleMap.has(styleName)) {
+          styleMap.set(styleName, {
+            style: styleName,
+            totalUnits: 0,
+            totalRevenue: 0,
+            sizes: {},
+            modelsMap: new Map(),
+          });
+        }
+
+        const entry = styleMap.get(styleName)!;
+        entry.totalUnits += item.quantity;
+        entry.totalRevenue += itemNet;
+        entry.sizes[size] = (entry.sizes[size] || 0) + item.quantity;
+
+        if (!entry.modelsMap.has(modelName)) {
+          entry.modelsMap.set(modelName, { model: modelName, units: 0, revenue: 0 });
+        }
+        const mEntry = entry.modelsMap.get(modelName)!;
+        mEntry.units += item.quantity;
+        mEntry.revenue += itemNet;
+      }
+    }
+
+    const stylesResult = Array.from(styleMap.values())
+      .map((s) => {
+        const allSizes = ['35', '36', '37', '38', '39', '40', '41', '42'];
+        const sizePercentages: Record<string, number> = {};
+        allSizes.forEach((sz) => {
+          const qty = s.sizes[sz] || 0;
+          sizePercentages[sz] = s.totalUnits > 0 ? Math.round((qty / s.totalUnits) * 100) : 0;
+        });
+
+        const topModels = Array.from(s.modelsMap.values())
+          .sort((a, b) => b.units - a.units)
+          .slice(0, 5);
+
+        return {
+          style: s.style,
+          totalUnits: s.totalUnits,
+          totalRevenue: s.totalRevenue,
+          shareOfUnitsPct: grandUnits > 0 ? Math.round((s.totalUnits / grandUnits) * 100) : 0,
+          shareOfRevenuePct: grandRevenue > 0 ? Math.round((s.totalRevenue / grandRevenue) * 100) : 0,
+          sizes: s.sizes,
+          sizePercentages,
+          topModels,
+        };
+      })
+      .sort((a, b) => b.totalUnits - a.totalUnits);
+
+    return {
+      summary: {
+        totalUnits: grandUnits,
+        totalRevenue: grandRevenue,
+        openUnits,
+        openRevenue,
+        openUnitsPct: grandUnits > 0 ? Math.round((openUnits / grandUnits) * 100) : 0,
+        closedUnits,
+        closedRevenue,
+        closedUnitsPct: grandUnits > 0 ? Math.round((closedUnits / grandUnits) * 100) : 0,
+      },
+      styles: stylesResult,
+    };
+  }
 }
