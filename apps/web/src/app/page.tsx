@@ -3802,14 +3802,16 @@ export default function AppContainer() {
                           const maxPct = Math.max(...allSizes.map(sz => row.sizePercentages[sz] || 0));
 
                           return (
-                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
-                              <td className="p-3.5 pl-4 font-black text-gray-900 dark:text-white flex items-center gap-2">
-                                <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green inline-block"></span>
-                                {row.style}
+                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors align-middle">
+                              <td className="p-3.5 pl-4 font-black text-gray-900 dark:text-white align-middle">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green inline-block shrink-0"></span>
+                                  <span>{row.style}</span>
+                                </div>
                               </td>
-                              <td className="p-3.5 text-right font-black text-gray-900 dark:text-white">{row.totalUnits.toLocaleString("es-CL")}</td>
-                              <td className="p-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">{row.shareOfUnitsPct}%</td>
-                              <td className="p-3.5 text-right font-black text-gray-950 dark:text-white">${row.totalRevenue.toLocaleString("es-CL")}</td>
+                              <td className="p-3.5 text-right font-black text-gray-900 dark:text-white align-middle">{row.totalUnits.toLocaleString("es-CL")}</td>
+                              <td className="p-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400 align-middle">{row.shareOfUnitsPct}%</td>
+                              <td className="p-3.5 text-right font-black text-gray-950 dark:text-white align-middle">${row.totalRevenue.toLocaleString("es-CL")}</td>
                               
                               {allSizes.map(sz => {
                                 const pct = row.sizePercentages[sz] || 0;
@@ -3819,7 +3821,7 @@ export default function AppContainer() {
                                 return (
                                   <td 
                                     key={sz} 
-                                    className={`p-2 text-center font-bold transition-all ${
+                                    className={`p-2 text-center font-bold transition-all align-middle ${
                                       isTop 
                                         ? "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-900 dark:text-emerald-200 font-black rounded-lg" 
                                         : pct > 15 
@@ -3833,7 +3835,7 @@ export default function AppContainer() {
                                 );
                               })}
 
-                              <td className="p-3.5 pr-4 text-gray-700 dark:text-gray-300 font-bold">
+                              <td className="p-3.5 pr-4 text-gray-700 dark:text-gray-300 font-bold align-middle">
                                 {row.topModels.length > 0 ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-white/10 rounded-lg text-xs">
                                     🏆 {row.topModels[0].model} <span className="text-[10px] text-gray-500 font-normal">({row.topModels[0].units} un)</span>
