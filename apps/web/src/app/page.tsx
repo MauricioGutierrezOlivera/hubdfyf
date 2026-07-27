@@ -1517,21 +1517,21 @@ export default function AppContainer() {
 
                         {/* Sizes & Stock Selector */}
                         <div className="flex flex-col items-end gap-1 flex-shrink-0 max-w-sm sm:max-w-md">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tallas Disponibles</span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TALLAS (DISPONIBLES)</span>
                           <div className="flex gap-1.5 flex-wrap justify-end">
                             {product.variants.map((variant) => (
                               <button
                                 key={variant.id}
                                 disabled={variant.quantity <= 0}
                                 onClick={() => addToCart(product.name, variant, product.price)}
-                                className={`px-2.5 py-1 text-xs border rounded-lg font-bold transition-all flex flex-col items-center min-w-[42px] cursor-pointer ${
+                                className={`px-2.5 py-1 text-xs border rounded-lg transition-all flex flex-col items-center min-w-[42px] cursor-pointer ${
                                   variant.quantity <= 0 
                                     ? "bg-gray-100 dark:bg-[#022c20]/50 border-gray-100 dark:border-[#055740]/20 text-gray-300 dark:text-gray-600 line-through cursor-not-allowed" 
                                     : "border-gray-200 dark:border-[#055740] text-gray-700 dark:text-gray-300 hover:border-dfyf-green hover:text-dfyf-green hover:bg-dfyf-green/5"
                                 }`}
                               >
-                                <span>{variant.size}</span>
-                                <span className="text-[8px] font-normal mt-0.5 opacity-70">({variant.quantity})</span>
+                                <span className="font-black text-sm">{variant.size}</span>
+                                <span className="text-sm font-semibold opacity-75">({variant.quantity})</span>
                               </button>
                             ))}
                           </div>
