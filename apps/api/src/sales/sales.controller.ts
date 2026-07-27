@@ -137,6 +137,15 @@ export class SalesController {
     return this.salesService.getStyleReport(storeId, fY, fM, tY, tM);
   }
 
+  @Get('reports/inventory')
+  async getInventoryReport(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-store-id') storeId: string,
+  ) {
+    this.checkAuth(userId, storeId);
+    return this.salesService.getInventoryReport(storeId);
+  }
+
   @Post('sales')
   async createSale(
     @Headers('x-user-id') userId: string,

@@ -65,7 +65,8 @@ export default function AppContainer() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeStore, setActiveStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock">("pos");
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Login States
   const [loginEmail, setLoginEmail] = useState("");
@@ -180,6 +181,13 @@ export default function AppContainer() {
   const [styleReportData, setStyleReportData] = useState<any>(null);
   const [isLoadingStyleReport, setIsLoadingStyleReport] = useState<boolean>(false);
   const [stylePeriodMode, setStylePeriodMode] = useState<"ALL" | "FILTER">("ALL");
+
+  // Stock Report States (Admin Only)
+  const [stockReportData, setStockReportData] = useState<any>(null);
+  const [isLoadingStockReport, setIsLoadingStockReport] = useState<boolean>(false);
+  const [stockViewMode, setStockViewMode] = useState<"TOTAL" | "BY_STYLE" | "BY_MODEL">("TOTAL");
+  const [stockSortColumn, setStockSortColumn] = useState<string>("total");
+  const [stockSortDir, setStockSortDir] = useState<"asc" | "desc">("desc");
 
   // Admin Section States
   const [users, setUsers] = useState<User[]>([]);
@@ -568,6 +576,33 @@ export default function AppContainer() {
       fetchStyleReport();
     }
   }, [activeTab, stylePeriodMode, analyticsFromYear, analyticsFromMonth, analyticsToYear, analyticsToMonth, activeStore, currentUser]);
+
+  const fetchStockReport = async () => {
+    if (!currentUser || !activeStore || currentUser.role === "CLERK") return;
+    setIsLoadingStockReport(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/inventory`, {
+        headers: {
+          "x-user-id": currentUser.id,
+          "x-store-id": activeStore.id,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStockReportData(data);
+      }
+    } catch (e) {
+      console.error("Error loading stock report:", e);
+    } finally {
+      setIsLoadingStockReport(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "stock" && currentUser && activeStore && currentUser.role !== "CLERK") {
+      fetchStockReport();
+    }
+  }, [activeTab, activeStore, currentUser]);
 
   // Fetch admin metadata
   const fetchAdminData = async (user: User) => {
@@ -1386,26 +1421,37 @@ export default function AppContainer() {
               </button>
 
               <button 
-                onClick={() => setActiveTab("admin")}
+                onClick={() => setActiveTab("stock")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  activeTab === "admin" 
+                  activeTab === "stock" 
                     ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
                     : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300"
                 }`}
               >
-                <span>⚙️ Configuración</span>
+                <span>📦 Análisis de Stock</span>
               </button>
             </>
           )}
         </nav>
 
+        {/* Sidebar Footer: Configuración */}
         <div className="p-4 border-t border-gray-200 dark:border-[#055740]">
-          <button 
-            onClick={handleLogout}
-            className="w-full py-2.5 border border-red-200 dark:border-red-900/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl font-bold text-sm transition-all"
-          >
-            Cerrar Sesión
-          </button>
+          {currentUser.role !== "CLERK" ? (
+            <button 
+              onClick={() => setActiveTab("admin")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
+                activeTab === "admin" 
+                  ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
+                  : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#055740]"
+              }`}
+            >
+              <span>⚙️ Configuración</span>
+            </button>
+          ) : (
+            <div className="text-center py-2 text-xs font-bold text-gray-400">
+              DFYF Gestor de Ventas
+            </div>
+          )}
         </div>
       </aside>
 
@@ -1434,21 +1480,57 @@ export default function AppContainer() {
           <div className="flex items-center gap-4 ml-6">
             <button 
               onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-[#044c38] hover:bg-gray-200 dark:hover:bg-[#055740] transition-colors border border-gray-200 dark:border-[#055740] text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm font-bold shadow-sm"
+              className="p-2 rounded-lg bg-gray-100 dark:bg-[#044c38] hover:bg-gray-200 dark:hover:bg-[#055740] transition-colors border border-gray-200 dark:border-[#055740] text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm font-bold shadow-sm cursor-pointer"
             >
               {isDarkMode ? '☀️ Claro' : '🌙 Oscuro'}
             </button>
 
-            <div className="flex items-center gap-3 border-l border-gray-200 dark:border-[#055740] pl-4">
-              <div className="w-8 h-8 rounded-full bg-dfyf-green flex items-center justify-center text-white font-bold">
-                {currentUser.name.charAt(0)}
-              </div>
-              <div className="flex flex-col">
-                 <span className="text-sm font-bold text-gray-900 dark:text-white">{currentUser.name}</span>
-                 <span className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">
-                   {currentUser.role === "SUPER_ADMIN" ? "ADMIN" : currentUser.role === "COUNTRY_ADMIN" ? "Admin Tienda" : "Vendedor"}
-                 </span>
-              </div>
+            {/* Characteristic User Profile Pill & Dropdown Menu */}
+            <div className="relative border-l border-gray-200 dark:border-[#055740] pl-4">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-3 p-1.5 px-3 rounded-2xl hover:bg-gray-100 dark:hover:bg-[#044c38] transition-all border border-transparent hover:border-gray-200 dark:hover:border-[#055740] cursor-pointer group"
+              >
+                <div className="w-8 h-8 rounded-full bg-dfyf-green flex items-center justify-center text-white font-black shadow-sm group-hover:scale-105 transition-transform">
+                  {currentUser.name.charAt(0)}
+                </div>
+                <div className="flex flex-col text-left">
+                   <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1">
+                     {currentUser.name}
+                     <span className="text-[10px] opacity-60">▼</span>
+                   </span>
+                   <span className="text-[10px] text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider">
+                     {currentUser.role === "SUPER_ADMIN" ? "ADMIN" : currentUser.role === "COUNTRY_ADMIN" ? "Admin Tienda" : "Vendedor"}
+                   </span>
+                </div>
+              </button>
+
+              {/* User Dropdown Menu Popover */}
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowUserMenu(false)} />
+
+                  <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-xl z-30 p-3 space-y-3">
+                    <div className="px-3 py-2.5 bg-gray-50 dark:bg-[#022c20]/50 rounded-xl space-y-1">
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{currentUser.name}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">{currentUser.email}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-black rounded-md uppercase">
+                        {currentUser.role === "SUPER_ADMIN" ? "Administrador General" : currentUser.role === "COUNTRY_ADMIN" ? "Admin de Tienda" : "Vendedor / POS"}
+                      </span>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm"
+                    >
+                      🚪 Cerrar Sesión
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -3861,6 +3943,280 @@ export default function AppContainer() {
                     Las tallas **37 y 38** concentran históricamente más del **55%** de las ventas totales en calzado. Se recomienda ajustar la curva de pedido enviando a fábrica en España un ratio sugerido de **1-2-4-4-3-2-1** para las tallas [35-36-37-38-39-40-41] por cada lote de 17 pares.
                   </p>
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* TAB 4.8: ANÁLISIS DE STOCK EN BODEGA */}
+          {activeTab === "stock" && (() => {
+            if (currentUser?.role === "CLERK") {
+              return (
+                <div className="p-8 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 rounded-3xl border border-amber-200 font-bold">
+                  🔒 Acceso Restringido. Este reporte de análisis de inventario está disponible únicamente para Administradores.
+                </div>
+              );
+            }
+
+            if (isLoadingStockReport) {
+              return (
+                <div className="flex items-center justify-center p-20 text-gray-500 font-bold">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-dfyf-green mr-3"></div>
+                  Cargando análisis de stock en bodega...
+                </div>
+              );
+            }
+
+            if (!stockReportData) {
+              return (
+                <div className="p-8 bg-gray-50 dark:bg-white/5 rounded-3xl text-gray-500 font-medium">
+                  No se encontraron datos de inventario en bodega.
+                </div>
+              );
+            }
+
+            const { summary, byStyle, byModel } = stockReportData;
+
+            const handleSort = (col: string) => {
+              if (stockSortColumn === col) {
+                setStockSortDir(stockSortDir === "asc" ? "desc" : "asc");
+              } else {
+                setStockSortColumn(col);
+                setStockSortDir("desc");
+              }
+            };
+
+            const getSortedData = (items: any[]) => {
+              return [...items].sort((a, b) => {
+                let valA: any = 0;
+                let valB: any = 0;
+
+                if (stockSortColumn === "name") {
+                  valA = (a.style || a.model || "").toLowerCase();
+                  valB = (b.style || b.model || "").toLowerCase();
+                  return stockSortDir === "asc"
+                    ? valA.localeCompare(valB)
+                    : valB.localeCompare(valA);
+                } else if (stockSortColumn === "total") {
+                  valA = a.total || 0;
+                  valB = b.total || 0;
+                } else {
+                  valA = a.sizes[stockSortColumn] || 0;
+                  valB = b.sizes[stockSortColumn] || 0;
+                }
+
+                return stockSortDir === "asc" ? valA - valB : valB - valA;
+              });
+            };
+
+            const allSizes = ["35", "36", "37", "38", "39", "40", "41", "42"];
+
+            return (
+              <div className="h-full overflow-y-auto pr-2 pb-12 space-y-8">
+                {/* Header Title & 3 Filter Toggle Buttons */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-8 rounded-3xl text-white shadow-xl">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black rounded-full uppercase tracking-wider">
+                        Inventario Bodega
+                      </span>
+                      <span className="text-xs text-gray-300 font-medium">Exclusivo Admin</span>
+                    </div>
+                    <h1 className="text-2xl md:text-3xl font-black">Análisis de Stock & Curva de Tallas en Bodega</h1>
+                    <p className="text-sm text-gray-300 mt-1 max-w-2xl font-medium">
+                      Visualización completa de existencias disponibles por modelo, estilo y curva de números en almacén.
+                    </p>
+                  </div>
+
+                  {/* 3 View Filter Buttons: TOTAL, POR ESTILO, POR MODELO */}
+                  <div className="flex items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10">
+                    <button
+                      onClick={() => setStockViewMode("TOTAL")}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        stockViewMode === "TOTAL"
+                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
+                          : "text-gray-300 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      🌐 TOTAL
+                    </button>
+                    <button
+                      onClick={() => setStockViewMode("BY_STYLE")}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        stockViewMode === "BY_STYLE"
+                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
+                          : "text-gray-300 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      👠 POR ESTILO
+                    </button>
+                    <button
+                      onClick={() => setStockViewMode("BY_MODEL")}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        stockViewMode === "BY_MODEL"
+                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
+                          : "text-gray-300 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      👞 POR MODELO
+                    </button>
+                  </div>
+                </div>
+
+                {/* VIEW MODE 1: TOTAL KPI SUMMARY */}
+                {stockViewMode === "TOTAL" && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                        <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">Stock Total en Bodega</span>
+                        <div className="text-3xl font-black text-gray-900 dark:text-white">
+                          {summary.totalStock.toLocaleString("es-CL")} <span className="text-sm font-bold text-gray-500">unidades</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mb-1">Stock Calzado (Pares)</span>
+                        <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                          {summary.shoeStock.toLocaleString("es-CL")} <span className="text-sm font-bold text-emerald-600/70">pares</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                        <span className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1">Modelos Únicos</span>
+                        <div className="text-3xl font-black text-gray-900 dark:text-white">{summary.totalModels} <span className="text-sm font-bold text-gray-500">modelos</span></div>
+                      </div>
+
+                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
+                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">Estilos de Calzado</span>
+                        <div className="text-3xl font-black text-gray-900 dark:text-white">{summary.totalStyles} <span className="text-sm font-bold text-gray-500">estilos</span></div>
+                      </div>
+                    </div>
+
+                    {/* Stock Overview Table */}
+                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-4">
+                      <h3 className="text-lg font-black text-gray-900 dark:text-white">Resumen General de Existencias</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-[#055740] space-y-2">
+                          <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                            <span>Categoría de Producto</span>
+                            <span>Existencias</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm font-black text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2">
+                            <span>👟 Calzado de Mujer (Zapatos / Botas / Sandalias)</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">{summary.shoeStock.toLocaleString("es-CL")} pares</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm font-black text-gray-900 dark:text-white pt-1">
+                            <span>🧦 Accesorios (Plantillas y Calcetines)</span>
+                            <span className="text-amber-600 dark:text-amber-400">{summary.accStock.toLocaleString("es-CL")} un</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-[#055740] flex flex-col justify-center">
+                          <span className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Acción Rápida</span>
+                          <p className="text-xs text-gray-500 font-medium mb-3">
+                            Selecciona los filtros **POR ESTILO** o **POR MODELO** en la parte superior para consultar y ordenar la matriz de curva de tallas detallada.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* VIEW MODE 2 & 3: BY_STYLE or BY_MODEL MATRIX TABLE */}
+                {(stockViewMode === "BY_STYLE" || stockViewMode === "BY_MODEL") && (() => {
+                  const rawItems = stockViewMode === "BY_STYLE" ? byStyle : byModel;
+                  const sortedItems = getSortedData(rawItems);
+
+                  return (
+                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-6">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                        <div>
+                          <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                            Matriz de Stock en Bodega {stockViewMode === "BY_STYLE" ? "Desagrupado por Estilo" : "Desagrupado por Modelo"}
+                          </h3>
+                          <p className="text-xs text-gray-500 font-medium">
+                            Haz clic en los encabezados de las columnas (Tallas 35-42, Total, {stockViewMode === "BY_STYLE" ? "Estilo" : "Modelo"}) para ordenar de forma ascendente o descendente.
+                          </p>
+                        </div>
+                        <div className="text-xs font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200/50">
+                          ↕️ Clic en encabezado para ordenar ↑ / ↓
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-white/5 text-gray-500 font-black uppercase tracking-wider border-b border-gray-200 dark:border-[#055740]">
+                              <th 
+                                onClick={() => handleSort("name")}
+                                className="p-3.5 pl-4 rounded-l-2xl cursor-pointer hover:text-dfyf-green transition-colors"
+                              >
+                                <div className="flex items-center gap-1">
+                                  {stockViewMode === "BY_STYLE" ? "Estilo" : "Modelo"}
+                                  {stockSortColumn === "name" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                </div>
+                              </th>
+
+                              <th 
+                                onClick={() => handleSort("total")}
+                                className="p-3.5 text-right cursor-pointer hover:text-dfyf-green transition-colors"
+                              >
+                                <div className="flex items-center justify-end gap-1">
+                                  TOTAL PARES
+                                  {stockSortColumn === "total" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                </div>
+                              </th>
+
+                              {allSizes.map(sz => (
+                                <th 
+                                  key={sz} 
+                                  onClick={() => handleSort(sz)}
+                                  className="p-3.5 text-center font-black bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-pointer hover:bg-emerald-500/20 transition-colors"
+                                >
+                                  Talla {sz}
+                                  {stockSortColumn === sz && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
+                            {sortedItems.map((row: any, idx: number) => {
+                              return (
+                                <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors align-middle">
+                                  <td className="p-3.5 pl-4 font-black text-gray-900 dark:text-white align-middle">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green inline-block shrink-0"></span>
+                                      <span>{stockViewMode === "BY_STYLE" ? row.style : row.model}</span>
+                                    </div>
+                                  </td>
+
+                                  <td className="p-3.5 text-right font-black text-emerald-600 dark:text-emerald-400 align-middle text-sm">
+                                    {row.total.toLocaleString("es-CL")}
+                                  </td>
+
+                                  {allSizes.map(sz => {
+                                    const qty = row.sizes[sz] || 0;
+                                    return (
+                                      <td 
+                                        key={sz} 
+                                        className={`p-3 text-center font-bold transition-all align-middle ${
+                                          qty > 0 
+                                            ? "bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-200 font-black" 
+                                            : "text-gray-300 dark:text-gray-600"
+                                        }`}
+                                      >
+                                        {qty}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}

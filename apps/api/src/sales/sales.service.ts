@@ -1236,4 +1236,119 @@ export class SalesService {
       styles: stylesResult,
     };
   }
+
+  async getInventoryReport(storeId: string) {
+    const inventory = await this.prisma.inventory.findMany({
+      where: {
+        storeId,
+        product: {
+          status: {
+            equals: 'active',
+            mode: 'insensitive',
+          },
+        },
+      },
+      include: {
+        product: true,
+      },
+    });
+
+    let grandTotalStock = 0;
+    let shoeTotalStock = 0;
+    let accTotalStock = 0;
+
+    const styleMap = new Map<
+      string,
+      {
+        style: string;
+        sizes: Record<string, number>;
+        total: number;
+        modelsSet: Set<string>;
+      }
+    >();
+
+    const modelMap = new Map<
+      string,
+      {
+        model: string;
+        style: string;
+        sizes: Record<string, number>;
+        total: number;
+      }
+    >();
+
+    for (const inv of inventory) {
+      if (inv.quantity <= 0) continue;
+
+      const isAcc = isProductSockOrAccessory(inv.product.name);
+      grandTotalStock += inv.quantity;
+
+      if (isAcc) {
+        accTotalStock += inv.quantity;
+      } else {
+        shoeTotalStock += inv.quantity;
+      }
+
+      const styleName = inv.product.style || inv.product.family || 'Calzado General';
+      const modelName = inv.product.name.split('(')[0].trim();
+      const size = inv.product.size || 'UN';
+
+      // Group by Style
+      if (!styleMap.has(styleName)) {
+        styleMap.set(styleName, {
+          style: styleName,
+          sizes: {},
+          total: 0,
+          modelsSet: new Set(),
+        });
+      }
+      const sEntry = styleMap.get(styleName)!;
+      sEntry.total += inv.quantity;
+      sEntry.sizes[size] = (sEntry.sizes[size] || 0) + inv.quantity;
+      sEntry.modelsSet.add(modelName);
+
+      // Group by Model
+      if (!modelMap.has(modelName)) {
+        modelMap.set(modelName, {
+          model: modelName,
+          style: styleName,
+          sizes: {},
+          total: 0,
+        });
+      }
+      const mEntry = modelMap.get(modelName)!;
+      mEntry.total += inv.quantity;
+      mEntry.sizes[size] = (mEntry.sizes[size] || 0) + inv.quantity;
+    }
+
+    const byStyle = Array.from(styleMap.values())
+      .map((s) => ({
+        style: s.style,
+        total: s.total,
+        sizes: s.sizes,
+        modelCount: s.modelsSet.size,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const byModel = Array.from(modelMap.values())
+      .map((m) => ({
+        model: m.model,
+        style: m.style,
+        total: m.total,
+        sizes: m.sizes,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    return {
+      summary: {
+        totalStock: grandTotalStock,
+        shoeStock: shoeTotalStock,
+        accStock: accTotalStock,
+        totalModels: modelMap.size,
+        totalStyles: styleMap.size,
+      },
+      byStyle,
+      byModel,
+    };
+  }
 }
