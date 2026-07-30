@@ -1351,4 +1351,89 @@ export class SalesService {
       byModel,
     };
   }
+
+  async updateSale(
+    id: string,
+    updateData: {
+      date?: string;
+      vendedor?: string;
+      channel?: string;
+      paymentMethod?: string;
+      paymentBank?: string;
+      notes?: string;
+      customerId?: string | null;
+      items?: Array<{
+        id?: string;
+        price: number;
+        discount: number;
+        quantity: number;
+      }>;
+    },
+  ) {
+    const existingSale = await this.prisma.sale.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!existingSale) {
+      throw new NotFoundException('Venta no encontrada');
+    }
+
+    const dateVal = updateData.date ? new Date(updateData.date) : existingSale.date;
+    const vendedorVal = updateData.vendedor !== undefined ? updateData.vendedor : existingSale.vendedor;
+    const channelVal = updateData.channel !== undefined ? updateData.channel : existingSale.channel;
+    const paymentMethodVal = updateData.paymentMethod !== undefined ? updateData.paymentMethod : existingSale.paymentMethod;
+    const paymentBankVal = updateData.paymentBank !== undefined ? updateData.paymentBank : existingSale.paymentBank;
+    const notesVal = updateData.notes !== undefined ? updateData.notes : existingSale.notes;
+    const customerIdVal = updateData.customerId !== undefined ? updateData.customerId : existingSale.customerId;
+
+    let newTotal = existingSale.total;
+
+    if (updateData.items && updateData.items.length > 0) {
+      newTotal = 0;
+      for (const item of updateData.items) {
+        const isPercent = item.discount > 0 && item.discount <= 100;
+        const discountVal = isPercent
+          ? Math.round(item.price * (item.discount / 100))
+          : (item.discount || 0);
+        const finalUnitPrice = item.price - discountVal;
+        newTotal += finalUnitPrice * item.quantity;
+
+        if (item.id) {
+          await this.prisma.saleItem.update({
+            where: { id: item.id },
+            data: {
+              quantity: item.quantity,
+              price: item.price,
+              discount: item.discount,
+            },
+          });
+        }
+      }
+    }
+
+    const updatedSale = await this.prisma.sale.update({
+      where: { id },
+      data: {
+        date: dateVal,
+        vendedor: vendedorVal,
+        channel: channelVal,
+        paymentMethod: paymentMethodVal,
+        paymentBank: paymentBankVal,
+        notes: notesVal,
+        customerId: customerIdVal,
+        total: newTotal,
+      },
+      include: {
+        customer: true,
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    return updatedSale;
+  }
 }

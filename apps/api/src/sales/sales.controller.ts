@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Headers, Param, Query, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Headers, Param, Query, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { SaleType } from '@prisma/client';
 
@@ -35,6 +35,16 @@ export class SalesController {
   ) {
     this.checkAuth(userId);
     return this.salesService.getSaleDetails(saleId);
+  }
+
+  @Put('sales/:id')
+  async updateSale(
+    @Headers('x-user-id') userId: string,
+    @Param('id') saleId: string,
+    @Body() updateData: any,
+  ) {
+    this.checkAuth(userId);
+    return this.salesService.updateSale(saleId, updateData);
   }
 
   @Get('sales/customer/:id')
