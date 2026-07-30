@@ -178,6 +178,7 @@ export default function AppContainer() {
   const [editNotes, setEditNotes] = useState<string>("");
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSavingSaleEdit, setIsSavingSaleEdit] = useState<boolean>(false);
+  const [isDeletingSale, setIsDeletingSale] = useState<boolean>(false);
 
   // Analytics Screen States
   const [analyticsFromYear, setAnalyticsFromYear] = useState<number>(2025);
@@ -566,6 +567,39 @@ export default function AppContainer() {
       alert("Error al conectarse con el servidor");
     } finally {
       setIsSavingSaleEdit(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    if (!selectedSaleDetail || !currentUser) return;
+    if (!confirm("⚠️ ¿Estás seguro de que deseas eliminar de forma permanente esta transacción? El stock de los productos será restaurado en la tienda y en Shopify.")) {
+      return;
+    }
+
+    setIsDeletingSale(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/sales/${selectedSaleDetail.id}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-id": currentUser.id,
+        },
+      });
+
+      if (res.ok) {
+        alert("Transacción eliminada con éxito y stock restaurado.");
+        setSelectedSaleDetail(null);
+        setIsEditingSale(false);
+        fetchReportData();
+        fetchAnalyticsData();
+      } else {
+        const err = await res.json();
+        alert(err.message || "Error al eliminar la transacción");
+      }
+    } catch (e) {
+      console.error("Error deleting sale:", e);
+      alert("Error al conectarse con el servidor");
+    } finally {
+      setIsDeletingSale(false);
     }
   };
 
@@ -4775,383 +4809,410 @@ export default function AppContainer() {
       )}
 
       {/* MODAL 3: VIEW & EDIT SALE DETAILS */}
-      {selectedSaleDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-6 border-b border-gray-100 dark:border-[#055740] flex justify-between items-center bg-gray-50/50 dark:bg-[#022c20]/50">
-              <div>
-                <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                  {isEditingSale ? "✏️ Editar Transacción" : "Detalle de Transacción"}
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">ID: {selectedSaleDetail.id}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {!isEditingSale && (
-                  <button
-                    onClick={() => startEditingSale(selectedSaleDetail)}
-                    className="px-3.5 py-1.5 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+      {selectedSaleDetail && (() => {
+        const canEditSale = currentUser && (
+          currentUser.role !== "CLERK" ||
+          selectedSaleDetail.userId === currentUser.id ||
+          (selectedSaleDetail.vendedor && currentUser.name && selectedSaleDetail.vendedor.toLowerCase() === currentUser.name.toLowerCase())
+        );
+        const isAdminUser = currentUser && currentUser.role !== "CLERK";
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-6 border-b border-gray-100 dark:border-[#055740] flex justify-between items-center bg-gray-50/50 dark:bg-[#022c20]/50">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                    {isEditingSale ? "✏️ Editar Transacción" : "Detalle de Transacción"}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">ID: {selectedSaleDetail.id}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isEditingSale && canEditSale && (
+                    <button
+                      onClick={() => startEditingSale(selectedSaleDetail)}
+                      className="px-3.5 py-1.5 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      ✏️ Editar Venta
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => {
+                      setSelectedSaleDetail(null);
+                      setIsEditingSale(false);
+                    }} 
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer text-xl font-bold ml-2"
                   >
-                    ✏️ Editar Venta
+                    ✕
                   </button>
-                )}
-                <button 
-                  onClick={() => {
-                    setSelectedSaleDetail(null);
-                    setIsEditingSale(false);
-                  }} 
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer text-xl font-bold ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {isEditingSale ? (
-              /* EDIT MODE FORM */
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Fecha y Hora */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Fecha y Hora</label>
-                    <input 
-                      type="datetime-local"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                    />
-                  </div>
-
-                  {/* Vendedor */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Vendedor</label>
-                    <input 
-                      type="text"
-                      value={editVendedor}
-                      onChange={(e) => setEditVendedor(e.target.value)}
-                      placeholder="Nombre del Vendedor (ej: Beatriz, Marite)"
-                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                    />
-                  </div>
-
-                  {/* Canal de Venta */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Canal de Venta</label>
-                    <select
-                      value={editChannel}
-                      onChange={(e) => setEditChannel(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                    >
-                      <option value="OFFLINE">Tienda Física (OFFLINE)</option>
-                      <option value="ONLINE">Venta Web (ONLINE)</option>
-                      <option value="EVENTO">Evento / Pop-up (EVENTO)</option>
-                    </select>
-                  </div>
-
-                  {/* Método de Pago */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Método de Pago</label>
-                    <select
-                      value={editPaymentMethod}
-                      onChange={(e) => setEditPaymentMethod(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                    >
-                      <option value="Débito">Débito</option>
-                      <option value="Crédito">Crédito</option>
-                      <option value="Efectivo">Efectivo</option>
-                      <option value="Transferencia">Transferencia</option>
-                      <option value="MercadoPago">MercadoPago</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
-
-                  {/* Banco / Detalle de Pago */}
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Banco / Detalle de Pago</label>
-                    <input 
-                      type="text"
-                      value={editPaymentBank}
-                      onChange={(e) => setEditPaymentBank(e.target.value)}
-                      placeholder="Ej: Banco Estado, Transbank, etc."
-                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                    />
-                  </div>
-                </div>
-
-                {/* Edit Items Section */}
-                <div>
-                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Editar Artículos de la Transacción</h4>
-                  <div className="space-y-3">
-                    {editItems.map((item: any, idx: number) => {
-                      const isPercent = item.discount > 0 && item.discount <= 100;
-                      const discountVal = isPercent 
-                        ? Math.round(item.price * (item.discount / 100))
-                        : (item.discount || 0);
-                      const lineTotal = (item.price - discountVal) * item.quantity;
-
-                      return (
-                        <div key={idx} className="p-3 bg-gray-50 dark:bg-[#022c20]/40 border border-gray-200 dark:border-[#055740] rounded-xl space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-black text-gray-900 dark:text-white">
-                              {item.productName} (Talla: {item.productSize})
-                            </span>
-                            <span className="text-xs font-black text-dfyf-green">
-                              Subtotal: ${lineTotal.toLocaleString("es-CL")}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="text-[10px] font-bold text-gray-400 block mb-1">Precio Unit. ($)</label>
-                              <input 
-                                type="number"
-                                value={item.price}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  const updated = [...editItems];
-                                  updated[idx].price = val;
-                                  setEditItems(updated);
-                                }}
-                                className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-gray-400 block mb-1">Descuento ($ o %)</label>
-                              <input 
-                                type="number"
-                                value={item.discount}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  const updated = [...editItems];
-                                  updated[idx].discount = val;
-                                  setEditItems(updated);
-                                }}
-                                className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-gray-400 block mb-1">Cantidad</label>
-                              <input 
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value) || 1;
-                                  const updated = [...editItems];
-                                  updated[idx].quantity = val;
-                                  setEditItems(updated);
-                                }}
-                                className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Edit Notes */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Notas / Comentarios</label>
-                  <textarea 
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    rows={2}
-                    placeholder="Notas o motivos de la venta..."
-                    className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                  />
-                </div>
-
-                {/* Total recalculado */}
-                <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-[#055740]">
-                  <span className="text-xs font-bold text-gray-500">Total Recalculado:</span>
-                  <span className="text-lg font-black text-dfyf-green">
-                    ${editItems.reduce((acc, i) => {
-                      const isPercent = i.discount > 0 && i.discount <= 100;
-                      const discountVal = isPercent ? Math.round(i.price * (i.discount / 100)) : (i.discount || 0);
-                      return acc + (i.price - discountVal) * i.quantity;
-                    }, 0).toLocaleString("es-CL")}
-                  </span>
                 </div>
               </div>
-            ) : (
-              /* READ MODE VIEW */
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                {/* Resumen de Venta */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 dark:bg-[#022c20]/40 p-4 rounded-xl border border-gray-100 dark:border-[#055740]/40">
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Fecha</span>
-                    <span className="text-xs font-bold text-gray-900 dark:text-white">
-                      {new Date(selectedSaleDetail.date).toLocaleDateString("es-CL", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
+
+              {isEditingSale ? (
+                /* EDIT MODE FORM */
+                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Fecha y Hora */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Fecha y Hora</label>
+                      <input 
+                        type="datetime-local"
+                        value={editDate}
+                        onChange={(e) => setEditDate(e.target.value)}
+                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                      />
+                    </div>
+
+                    {/* Vendedor */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Vendedor</label>
+                      <input 
+                        type="text"
+                        value={editVendedor}
+                        onChange={(e) => setEditVendedor(e.target.value)}
+                        placeholder="Nombre del Vendedor (ej: Beatriz, Marite)"
+                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                      />
+                    </div>
+
+                    {/* Canal de Venta */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Canal de Venta</label>
+                      <select
+                        value={editChannel}
+                        onChange={(e) => setEditChannel(e.target.value)}
+                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                      >
+                        <option value="OFFLINE">Tienda Física (OFFLINE)</option>
+                        <option value="ONLINE">Venta Web (ONLINE)</option>
+                        <option value="EVENTO">Evento / Pop-up (EVENTO)</option>
+                      </select>
+                    </div>
+
+                    {/* Método de Pago */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Método de Pago</label>
+                      <select
+                        value={editPaymentMethod}
+                        onChange={(e) => setEditPaymentMethod(e.target.value)}
+                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                      >
+                        <option value="Débito">Débito</option>
+                        <option value="Crédito">Crédito</option>
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="MercadoPago">MercadoPago</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+
+                    {/* Banco / Detalle de Pago */}
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Banco / Detalle de Pago</label>
+                      <input 
+                        type="text"
+                        value={editPaymentBank}
+                        onChange={(e) => setEditPaymentBank(e.target.value)}
+                        placeholder="Ej: Banco Estado, Transbank, etc."
+                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                      />
+                    </div>
                   </div>
+
+                  {/* Edit Items Section */}
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Vendedor</span>
-                    <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedSaleDetail.vendedor || "N/A"}</span>
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Editar Artículos de la Transacción</h4>
+                    <div className="space-y-3">
+                      {editItems.map((item: any, idx: number) => {
+                        const isPercent = item.discount > 0 && item.discount <= 100;
+                        const discountVal = isPercent 
+                          ? Math.round(item.price * (item.discount / 100))
+                          : (item.discount || 0);
+                        const lineTotal = (item.price - discountVal) * item.quantity;
+
+                        return (
+                          <div key={idx} className="p-3 bg-gray-50 dark:bg-[#022c20]/40 border border-gray-200 dark:border-[#055740] rounded-xl space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-gray-900 dark:text-white">
+                                {item.productName} (Talla: {item.productSize})
+                              </span>
+                              <span className="text-xs font-black text-dfyf-green">
+                                Subtotal: ${lineTotal.toLocaleString("es-CL")}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <label className="text-[10px] font-bold text-gray-400 block mb-1">Precio Unit. ($)</label>
+                                <input 
+                                  type="number"
+                                  value={item.price}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    const updated = [...editItems];
+                                    updated[idx].price = val;
+                                    setEditItems(updated);
+                                  }}
+                                  className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] font-bold text-gray-400 block mb-1">Descuento ($ o %)</label>
+                                <input 
+                                  type="number"
+                                  value={item.discount}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    const updated = [...editItems];
+                                    updated[idx].discount = val;
+                                    setEditItems(updated);
+                                  }}
+                                  className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[10px] font-bold text-gray-400 block mb-1">Cantidad</label>
+                                <input 
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 1;
+                                    const updated = [...editItems];
+                                    updated[idx].quantity = val;
+                                    setEditItems(updated);
+                                  }}
+                                  className="w-full p-2 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg text-xs font-bold text-gray-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  {/* Edit Notes */}
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Canal</span>
-                    <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedSaleDetail.channel || "N/A"}</span>
+                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Notas / Comentarios</label>
+                    <textarea 
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      rows={2}
+                      placeholder="Notas o motivos de la venta..."
+                      className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+                    />
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Método de Pago</span>
-                    <span className="text-xs font-bold text-gray-900 dark:text-white">
-                      {selectedSaleDetail.paymentMethod || "No registrado"}
-                      {selectedSaleDetail.paymentBank ? ` (${selectedSaleDetail.paymentBank})` : ""}
+
+                  {/* Total recalculado */}
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-[#055740]">
+                    <span className="text-xs font-bold text-gray-500">Total Recalculado:</span>
+                    <span className="text-lg font-black text-dfyf-green">
+                      ${editItems.reduce((acc, i) => {
+                        const isPercent = i.discount > 0 && i.discount <= 100;
+                        const discountVal = isPercent ? Math.round(i.price * (i.discount / 100)) : (i.discount || 0);
+                        return acc + (i.price - discountVal) * i.quantity;
+                      }, 0).toLocaleString("es-CL")}
                     </span>
                   </div>
                 </div>
+              ) : (
+                /* READ MODE VIEW */
+                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                  {/* Resumen de Venta */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 dark:bg-[#022c20]/40 p-4 rounded-xl border border-gray-100 dark:border-[#055740]/40">
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase block">Fecha</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">
+                        {new Date(selectedSaleDetail.date).toLocaleDateString("es-CL", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase block">Vendedor</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedSaleDetail.vendedor || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase block">Canal</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedSaleDetail.channel || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase block">Método de Pago</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">
+                        {selectedSaleDetail.paymentMethod || "No registrado"}
+                        {selectedSaleDetail.paymentBank ? ` (${selectedSaleDetail.paymentBank})` : ""}
+                      </span>
+                    </div>
+                  </div>
 
-                {/* Información del Cliente */}
-                <div>
-                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Detalles del Cliente</h4>
-                  {selectedSaleDetail.customer ? (
-                    <div className="bg-white dark:bg-[#033b2b] border border-gray-100 dark:border-[#055740] rounded-xl p-4 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-gray-400">Nombre:</span>{" "}
-                          <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.name}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">RUT:</span>{" "}
-                          <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.rut || "Sin RUT"}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Email:</span>{" "}
-                          <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.email || "Sin email"}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Teléfono:</span>{" "}
-                          <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.phone || "Sin teléfono"}</span>
+                  {/* Información del Cliente */}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Detalles del Cliente</h4>
+                    {selectedSaleDetail.customer ? (
+                      <div className="bg-white dark:bg-[#033b2b] border border-gray-100 dark:border-[#055740] rounded-xl p-4 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-400">Nombre:</span>{" "}
+                            <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.name}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">RUT:</span>{" "}
+                            <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.rut || "Sin RUT"}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">Email:</span>{" "}
+                            <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.email || "Sin email"}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400">Teléfono:</span>{" "}
+                            <span className="font-bold text-gray-950 dark:text-white">{selectedSaleDetail.customer.phone || "Sin teléfono"}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-500 italic p-3 bg-gray-50 dark:bg-[#022c20]/20 rounded-xl border border-gray-100 dark:border-[#055740]/20 text-center">
-                      Venta directa en mesón sin registro de cliente (Venta rápida).
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <div className="text-xs text-gray-500 italic p-3 bg-gray-50 dark:bg-[#022c20]/20 rounded-xl border border-gray-100 dark:border-[#055740]/20 text-center">
+                        Venta directa en mesón sin registro de cliente (Venta rápida).
+                      </div>
+                    )}
+                  </div>
 
-                {/* Artículos de la Venta */}
-                <div>
-                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Artículos de la Transacción</h4>
-                  <div className="space-y-3">
-                    {selectedSaleDetail.items.map((item: any) => {
-                      const isPercent = item.discount > 0 && item.discount <= 100;
-                      const discountVal = isPercent 
-                        ? Math.round(item.price * (item.discount / 100))
-                        : (item.discount || 0);
-                      const pct = item.price > 0 ? Math.round((discountVal / item.price) * 100) : 0;
-                      const finalUnitPrice = item.price - discountVal;
-                      const finalTotalLine = finalUnitPrice * item.quantity;
-                      
-                      return (
-                        <div 
-                          key={item.id}
-                          className="flex items-center gap-4 p-3 bg-[#F9FAFB] dark:bg-[#044c38]/40 border border-gray-100 dark:border-[#055740]/40 rounded-xl"
-                        >
-                          <div className="w-14 h-14 bg-gray-100 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
-                            {item.product?.imageUrl ? (
-                              <img 
-                                src={item.product.imageUrl} 
-                                alt={item.product.name} 
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-[10px] text-gray-400 uppercase font-black">ZAPATO</span>
-                            )}
-                          </div>
+                  {/* Artículos de la Venta */}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Artículos de la Transacción</h4>
+                    <div className="space-y-3">
+                      {selectedSaleDetail.items.map((item: any) => {
+                        const isPercent = item.discount > 0 && item.discount <= 100;
+                        const discountVal = isPercent 
+                          ? Math.round(item.price * (item.discount / 100))
+                          : (item.discount || 0);
+                        const pct = item.price > 0 ? Math.round((discountVal / item.price) * 100) : 0;
+                        const finalUnitPrice = item.price - discountVal;
+                        const finalTotalLine = finalUnitPrice * item.quantity;
+                        
+                        return (
+                          <div 
+                            key={item.id}
+                            className="flex items-center gap-4 p-3 bg-[#F9FAFB] dark:bg-[#044c38]/40 border border-gray-100 dark:border-[#055740]/40 rounded-xl"
+                          >
+                            <div className="w-14 h-14 bg-gray-100 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
+                              {item.product?.imageUrl ? (
+                                <img 
+                                  src={item.product.imageUrl} 
+                                  alt={item.product.name} 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-[10px] text-gray-400 uppercase font-black">ZAPATO</span>
+                              )}
+                            </div>
 
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                              {item.product?.name || "Producto desconocido"}
-                              {item.product?.color ? ` - ${item.product.color}` : ""}
-                            </p>
-                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                              <span>Talla: <span className="font-bold text-gray-800 dark:text-gray-200">{item.product?.size || "N/A"}</span></span>
-                              <span>Cantidad: <span className="font-bold text-gray-800 dark:text-gray-200">{item.quantity}</span></span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                                {item.product?.name || "Producto desconocido"}
+                                {item.product?.color ? ` - ${item.product.color}` : ""}
+                              </p>
+                              <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                                <span>Talla: <span className="font-bold text-gray-800 dark:text-gray-200">{item.product?.size || "N/A"}</span></span>
+                                <span>Cantidad: <span className="font-bold text-gray-800 dark:text-gray-200">{item.quantity}</span></span>
+                              </div>
+                            </div>
+
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-sm font-black text-gray-900 dark:text-white">
+                                ${finalTotalLine.toLocaleString("es-CL")}
+                              </p>
+                              {discountVal > 0 && (
+                                <p className="text-[10px] text-red-500 font-bold">
+                                  Desc: -${(discountVal * item.quantity).toLocaleString("es-CL")} ({pct}%)
+                                </p>
+                              )}
+                              <p className="text-[9px] text-gray-400">
+                                Unit: ${item.price.toLocaleString("es-CL")}
+                              </p>
                             </div>
                           </div>
-
-                          <div className="text-right flex-shrink-0">
-                            <p className="text-sm font-black text-gray-900 dark:text-white">
-                              ${finalTotalLine.toLocaleString("es-CL")}
-                            </p>
-                            {discountVal > 0 && (
-                              <p className="text-[10px] text-red-500 font-bold">
-                                Desc: -${(discountVal * item.quantity).toLocaleString("es-CL")} ({pct}%)
-                              </p>
-                            )}
-                            <p className="text-[9px] text-gray-400">
-                              Unit: ${item.price.toLocaleString("es-CL")}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Notas de la venta */}
-                {selectedSaleDetail.notes && (
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Notas / Comentarios</h4>
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 text-amber-800 dark:text-amber-300 text-xs rounded-xl italic">
-                      "{selectedSaleDetail.notes}"
+                        );
+                      })}
                     </div>
                   </div>
-                )}
 
-                {/* Total final */}
-                <div className="flex justify-between items-center pt-4 border-t border-gray-100 dark:border-[#055740]/40">
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">Monto Total de la Transacción:</span>
-                  <span className="text-xl font-black text-dfyf-green">
-                    ${selectedSaleDetail.total.toLocaleString("es-CL")}
-                  </span>
+                  {/* Notas de la venta */}
+                  {selectedSaleDetail.notes && (
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Notas / Comentarios</h4>
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 text-amber-800 dark:text-amber-300 text-xs rounded-xl italic">
+                        "{selectedSaleDetail.notes}"
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total final */}
+                  <div className="flex justify-between items-center pt-4 border-t border-gray-100 dark:border-[#055740]/40">
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">Monto Total de la Transacción:</span>
+                    <span className="text-xl font-black text-dfyf-green">
+                      ${selectedSaleDetail.total.toLocaleString("es-CL")}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* MODAL FOOTER */}
-            <div className="p-4 bg-gray-50 dark:bg-[#022c20] border-t border-gray-100 dark:border-[#055740] flex justify-end gap-3">
-              {isEditingSale ? (
-                <>
-                  <button
-                    onClick={() => setIsEditingSale(false)}
-                    className="px-5 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold rounded-xl text-xs cursor-pointer transition-all hover:bg-gray-300"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSaveSaleEdit}
-                    disabled={isSavingSaleEdit}
-                    className="px-6 py-2 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    {isSavingSaleEdit ? "Guardando..." : "💾 Guardar Cambios"}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => startEditingSale(selectedSaleDetail)}
-                    className="px-5 py-2 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 font-bold rounded-xl text-xs cursor-pointer transition-all"
-                  >
-                    ✏️ Editar Venta
-                  </button>
-                  <button
-                    onClick={() => setSelectedSaleDetail(null)}
-                    className="px-6 py-2 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md"
-                  >
-                    Cerrar
-                  </button>
-                </>
               )}
+
+              {/* MODAL FOOTER */}
+              <div className="p-4 bg-gray-50 dark:bg-[#022c20] border-t border-gray-100 dark:border-[#055740] flex justify-between items-center gap-3">
+                {isEditingSale ? (
+                  <>
+                    <div>
+                      {isAdminUser && (
+                        <button
+                          onClick={handleDeleteSale}
+                          disabled={isDeletingSale || isSavingSaleEdit}
+                          className="px-4 py-2 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {isDeletingSale ? "Eliminando..." : "🗑️ Eliminar Transacción"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setIsEditingSale(false)}
+                        className="px-5 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold rounded-xl text-xs cursor-pointer transition-all hover:bg-gray-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveSaleEdit}
+                        disabled={isSavingSaleEdit || isDeletingSale}
+                        className="px-6 py-2 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {isSavingSaleEdit ? "Guardando..." : "💾 Guardar Cambios"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div />
+                    <div className="flex items-center gap-3">
+                      {canEditSale && (
+                        <button
+                          onClick={() => startEditingSale(selectedSaleDetail)}
+                          className="px-5 py-2 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 font-bold rounded-xl text-xs cursor-pointer transition-all"
+                        >
+                          ✏️ Editar Venta
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSelectedSaleDetail(null)}
+                        className="px-6 py-2 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

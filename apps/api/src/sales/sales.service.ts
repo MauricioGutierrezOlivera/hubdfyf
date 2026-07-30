@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaleType } from '@prisma/client';
 import { ShopifyService } from '../shopify/shopify.service';
@@ -1354,6 +1354,7 @@ export class SalesService {
 
   async updateSale(
     id: string,
+    userId: string,
     updateData: {
       date?: string;
       vendedor?: string;
@@ -1370,13 +1371,31 @@ export class SalesService {
       }>;
     },
   ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const existingSale = await this.prisma.sale.findUnique({
       where: { id },
-      include: { items: true },
+      include: {
+        user: true,
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
     });
 
     if (!existingSale) {
       throw new NotFoundException('Venta no encontrada');
+    }
+
+    // Role check: CLERK can ONLY edit their own sales
+    if (user && user.role === 'CLERK') {
+      const isOwner =
+        existingSale.userId === user.id ||
+        (existingSale.vendedor && user.name && existingSale.vendedor.toLowerCase() === user.name.toLowerCase());
+      if (!isOwner) {
+        throw new ForbiddenException('Solo puedes editar las transacciones creadas por tu propio usuario');
+      }
     }
 
     const dateVal = updateData.date ? new Date(updateData.date) : existingSale.date;
@@ -1400,6 +1419,47 @@ export class SalesService {
         newTotal += finalUnitPrice * item.quantity;
 
         if (item.id) {
+          const existingItem = existingSale.items.find((i) => i.id === item.id);
+          if (existingItem) {
+            const oldQty = existingItem.quantity;
+            const newQty = item.quantity;
+            const diff = newQty - oldQty; // e.g. +1 if quantity increased, -1 if decreased
+
+            if (diff !== 0 && existingItem.productId) {
+              // Update local DB stock
+              await this.prisma.inventory.updateMany({
+                where: {
+                  storeId: existingSale.storeId,
+                  productId: existingItem.productId,
+                },
+                data: {
+                  quantity: {
+                    decrement: diff,
+                  },
+                },
+              });
+
+              // Update Shopify stock
+              if (existingItem.product?.shopifyId) {
+                try {
+                  const variantRes = await this.shopifyService.shopifyFetch(`variants/${existingItem.product.shopifyId}.json`);
+                  const inventoryItemId = variantRes?.variant?.inventory_item_id;
+                  if (inventoryItemId) {
+                    const locationId = '69212209257';
+                    await this.shopifyService.adjustInventory(
+                      inventoryItemId.toString(),
+                      locationId,
+                      -diff,
+                    );
+                    this.logger.log(`[Shopify Sync] Adjusted stock on sale update: variant=${existingItem.product.shopifyId}, delta=${-diff}`);
+                  }
+                } catch (err: any) {
+                  this.logger.error(`[Shopify Sync Error] Failed to adjust stock on update: ${err.message}`);
+                }
+              }
+            }
+          }
+
           await this.prisma.saleItem.update({
             where: { id: item.id },
             data: {
@@ -1435,5 +1495,67 @@ export class SalesService {
     });
 
     return updatedSale;
+  }
+
+  async deleteSale(id: string, userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role === 'CLERK') {
+      throw new ForbiddenException('Solo los Administradores pueden eliminar transacciones');
+    }
+
+    const sale = await this.prisma.sale.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    if (!sale) {
+      throw new NotFoundException('Transacción no encontrada');
+    }
+
+    // Restore stock in local DB & Shopify for all items in the sale
+    for (const item of sale.items) {
+      if (item.quantity > 0 && item.productId) {
+        await this.prisma.inventory.updateMany({
+          where: {
+            storeId: sale.storeId,
+            productId: item.productId,
+          },
+          data: {
+            quantity: {
+              increment: item.quantity,
+            },
+          },
+        });
+
+        if (item.product?.shopifyId) {
+          try {
+            const variantRes = await this.shopifyService.shopifyFetch(`variants/${item.product.shopifyId}.json`);
+            const inventoryItemId = variantRes?.variant?.inventory_item_id;
+            if (inventoryItemId) {
+              const locationId = '69212209257';
+              await this.shopifyService.adjustInventory(
+                inventoryItemId.toString(),
+                locationId,
+                item.quantity, // restore stock to Shopify
+              );
+              this.logger.log(`[Shopify Sync] Restored stock for deleted sale item: variant=${item.product.shopifyId}, +${item.quantity}`);
+            }
+          } catch (err: any) {
+            this.logger.error(`[Shopify Sync Error] Failed to restore stock on sale delete: ${err.message}`);
+          }
+        }
+      }
+    }
+
+    await this.prisma.saleItem.deleteMany({ where: { saleId: id } });
+    await this.prisma.sale.delete({ where: { id } });
+
+    return { message: 'Transacción eliminada con éxito y stock restaurado' };
   }
 }
