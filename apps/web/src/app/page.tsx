@@ -179,6 +179,9 @@ export default function AppContainer() {
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSavingSaleEdit, setIsSavingSaleEdit] = useState<boolean>(false);
   const [isDeletingSale, setIsDeletingSale] = useState<boolean>(false);
+  const [editCustomer, setEditCustomer] = useState<any>(null);
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState<boolean>(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState<string>("");
 
   // Analytics Screen States
   const [analyticsFromYear, setAnalyticsFromYear] = useState<number>(2025);
@@ -519,6 +522,7 @@ export default function AppContainer() {
     setEditPaymentMethod(sale.paymentMethod || "Efectivo");
     setEditPaymentBank(sale.paymentBank || "");
     setEditNotes(sale.notes || "");
+    setEditCustomer(sale.customer || null);
     setEditItems(
       (sale.items || []).map((i: any) => ({
         id: i.id,
@@ -549,6 +553,7 @@ export default function AppContainer() {
           paymentMethod: editPaymentMethod,
           paymentBank: editPaymentBank,
           notes: editNotes,
+          customerId: editCustomer ? editCustomer.id : null,
           items: editItems,
         }),
       });
@@ -4917,6 +4922,44 @@ export default function AppContainer() {
                         className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
                       />
                     </div>
+
+                    {/* Cliente de la Transacción */}
+                    <div className="p-4 bg-gray-50 dark:bg-[#022c20]/40 border border-gray-200 dark:border-[#055740] rounded-xl space-y-2 sm:col-span-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-400 uppercase">Cliente de la Transacción</label>
+                        <div className="flex items-center gap-2">
+                          {editCustomer && (
+                            <button
+                              type="button"
+                              onClick={() => setEditCustomer(null)}
+                              className="text-xs text-red-500 hover:underline font-bold"
+                            >
+                              ❌ Quitar Cliente
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (customersList.length === 0) fetchCustomersList();
+                              setCustomerSearchQuery("");
+                              setIsCustomerPickerOpen(true);
+                            }}
+                            className="px-3 py-1 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            👤 {editCustomer ? "Cambiar Cliente" : "Asignar Cliente"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {editCustomer ? (
+                        <div className="text-xs space-y-0.5">
+                          <p className="font-black text-gray-900 dark:text-white">{editCustomer.name}</p>
+                          <p className="text-gray-500">RUT: {editCustomer.rut || "Sin RUT"} | Email: {editCustomer.email || "Sin email"} | Tel: {editCustomer.phone || "Sin teléfono"}</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 italic">Venta rápida sin cliente asignado.</p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Edit Items Section */}
@@ -5189,16 +5232,18 @@ export default function AppContainer() {
                   </>
                 ) : (
                   <>
-                    <div />
-                    <div className="flex items-center gap-3">
-                      {canEditSale && (
+                    <div>
+                      {isAdminUser && (
                         <button
-                          onClick={() => startEditingSale(selectedSaleDetail)}
-                          className="px-5 py-2 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 font-bold rounded-xl text-xs cursor-pointer transition-all"
+                          onClick={handleDeleteSale}
+                          disabled={isDeletingSale}
+                          className="px-4 py-2 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 flex items-center gap-1.5"
                         >
-                          ✏️ Editar Venta
+                          {isDeletingSale ? "Eliminando..." : "🗑️ Eliminar Transacción"}
                         </button>
                       )}
+                    </div>
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => setSelectedSaleDetail(null)}
                         className="px-6 py-2 bg-dfyf-green hover:bg-[#046c4e] text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md"
@@ -5213,6 +5258,85 @@ export default function AppContainer() {
           </div>
         );
       })()}
+
+      {/* POPUP MODAL: SELECCIONAR CLIENTE PARA EDICION DE VENTA */}
+      {isCustomerPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 dark:border-[#055740] pb-3">
+              <h3 className="text-base font-black text-gray-900 dark:text-white">👤 Seleccionar Cliente para la Venta</h3>
+              <button 
+                onClick={() => setIsCustomerPickerOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                placeholder="Buscar por Nombre, RUT, Email o Teléfono..."
+                className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
+              />
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+              <div 
+                onClick={() => {
+                  setEditCustomer(null);
+                  setIsCustomerPickerOpen(false);
+                }}
+                className="p-3 bg-gray-50 hover:bg-gray-100 dark:bg-[#022c20]/50 dark:hover:bg-[#022c20] rounded-xl border border-gray-200 dark:border-[#055740] cursor-pointer flex justify-between items-center transition-all"
+              >
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300">🚫 Sin Cliente (Venta Rápida)</span>
+                <span className="text-xs text-dfyf-green font-bold">Seleccionar</span>
+              </div>
+
+              {customersList
+                .filter((c: any) => {
+                  if (!customerSearchQuery.trim()) return true;
+                  const q = customerSearchQuery.toLowerCase();
+                  return (
+                    (c.name && c.name.toLowerCase().includes(q)) ||
+                    (c.rut && c.rut.toLowerCase().includes(q)) ||
+                    (c.email && c.email.toLowerCase().includes(q)) ||
+                    (c.phone && c.phone.toLowerCase().includes(q))
+                  );
+                })
+                .map((c: any) => (
+                  <div 
+                    key={c.id}
+                    onClick={() => {
+                      setEditCustomer(c);
+                      setIsCustomerPickerOpen(false);
+                    }}
+                    className="p-3 bg-gray-50 hover:bg-emerald-50/50 dark:bg-[#022c20]/30 dark:hover:bg-[#022c20] rounded-xl border border-gray-200 dark:border-[#055740] cursor-pointer flex justify-between items-center transition-all"
+                  >
+                    <div className="text-xs">
+                      <p className="font-bold text-gray-900 dark:text-white">{c.name}</p>
+                      <p className="text-[10px] text-gray-400">RUT: {c.rut || "Sin RUT"} | Email: {c.email || "Sin email"}</p>
+                    </div>
+                    <button className="px-3 py-1 bg-dfyf-green text-white text-[10px] font-bold rounded-lg shadow-sm">
+                      Seleccionar
+                    </button>
+                  </div>
+                ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-[#055740]">
+              <button
+                onClick={() => setIsCustomerPickerOpen(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
