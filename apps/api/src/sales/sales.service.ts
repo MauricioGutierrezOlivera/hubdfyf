@@ -103,33 +103,11 @@ export class SalesService {
       return cached.data;
     }
 
-    let inventoryItems = await this.prisma.inventory.findMany({
-      where: { 
-        storeId,
-        product: {
-          status: 'active',
-        },
-      },
-      select: {
-        quantity: true,
-        product: {
-          select: {
-            id: true,
-            name: true,
-            family: true,
-            size: true,
-            price: true,
-            compareAtPrice: true,
-            imageUrl: true,
-            shopifyId: true,
-          },
-        },
-      },
-    });
-
-    if (inventoryItems.length === 0) {
+    let inventoryItems: any[] = [];
+    try {
       inventoryItems = await this.prisma.inventory.findMany({
         where: { 
+          storeId,
           product: {
             status: 'active',
           },
@@ -150,6 +128,59 @@ export class SalesService {
           },
         },
       });
+
+      if (inventoryItems.length === 0) {
+        inventoryItems = await this.prisma.inventory.findMany({
+          where: { 
+            product: {
+              status: 'active',
+            },
+          },
+          select: {
+            quantity: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                family: true,
+                size: true,
+                price: true,
+                compareAtPrice: true,
+                imageUrl: true,
+                shopifyId: true,
+              },
+            },
+          },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to fetch catalog with compareAtPrice (schema migration pending?), falling back: ${err}`);
+      try {
+        inventoryItems = await this.prisma.inventory.findMany({
+          where: { 
+            product: {
+              status: 'active',
+            },
+          },
+          select: {
+            quantity: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                family: true,
+                size: true,
+                price: true,
+                imageUrl: true,
+                shopifyId: true,
+              },
+            },
+          },
+        });
+      } catch (fallbackErr) {
+        this.logger.error(`Critical error fetching catalog fallback: ${fallbackErr}`);
+        return [];
+      }
     }
 
     const grouped = new Map<
