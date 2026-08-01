@@ -45,4 +45,13 @@ export class ShopifyController {
     // TODO: Process the online order and update local inventory
     return { received: true };
   }
+
+  /**
+   * POST /shopify/sync-catalog
+   * Manually trigger full catalog & price sync from Shopify to PostgreSQL DB.
+   */
+  @Post('sync-catalog')
+  async syncCatalog() {
+    return this.shopifyService.syncCatalogFromShopify();
+  }
 }

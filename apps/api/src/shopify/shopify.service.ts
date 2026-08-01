@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { URLSearchParams } from 'node:url';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * ShopifyService handles all communication with the Shopify Admin API.
@@ -28,7 +28,10 @@ export class ShopifyService implements OnModuleInit {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {}
 
   onModuleInit() {
     this.shopUrl = this.configService.get<string>('SHOPIFY_STORE_URL', '');
@@ -48,6 +51,12 @@ export class ShopifyService implements OnModuleInit {
     } else {
       this.logger.log(`Shopify configured for store: ${this.shopUrl}`);
       this.logger.log('Using Client Credentials Grant for authentication');
+      // Trigger background catalog sync on startup to populate compareAtPrice & prices
+      setTimeout(() => {
+        this.syncCatalogFromShopify().catch((err) => {
+          this.logger.error(`Initial Shopify catalog sync failed: ${err}`);
+        });
+      }, 5000);
     }
   }
 
@@ -209,23 +218,55 @@ export class ShopifyService implements OnModuleInit {
     return this.shopifyFetch('locations.json');
   }
 
-  // ─── CONNECTION TEST ────────────────────────────────────────
+  /**
+   * Sync all active products, prices, and compare_at_price values directly from Shopify into PostgreSQL database.
+   */
+  async syncCatalogFromShopify(): Promise<{ success: boolean; updatedVariantsCount: number }> {
+    try {
+      this.logger.log('[Shopify Sync] Syncing catalog & compareAtPrice values from Shopify...');
+      const res = await this.getProducts(250);
+      const products = res.products || [];
+      let updatedVariantsCount = 0;
+
+      for (const p of products) {
+        for (const v of p.variants) {
+          const shopifyId = String(v.id);
+          const price = parseFloat(v.price || '0');
+          const compareAtPrice = v.compare_at_price ? parseFloat(v.compare_at_price) : null;
+          const imageUrl = p.image?.src || p.images?.[0]?.src || null;
+
+          try {
+            const resUpdate = await this.prisma.product.updateMany({
+              where: { shopifyId },
+              data: {
+                price,
+                compareAtPrice,
+                ...(imageUrl ? { imageUrl } : {}),
+              },
+            });
+            updatedVariantsCount += resUpdate.count;
+          } catch (e) {
+            // Ignore individual variant update errors
+          }
+        }
+      }
+
+      this.logger.log(`[Shopify Sync] Catalog sync complete. Updated ${updatedVariantsCount} product variants in DB.`);
+      return { success: true, updatedVariantsCount };
+    } catch (err) {
+      this.logger.error(`[Shopify Sync] Catalog sync failed: ${err}`);
+      return { success: false, updatedVariantsCount: 0 };
+    }
+  }
 
   /**
-   * Test the connection to Shopify by fetching the shop details.
-   * Returns shop info if successful.
+   * Test connection to Shopify.
    */
-  async testConnection(): Promise<{
-    success: boolean;
-    shop?: any;
-    error?: string;
-  }> {
+  async testConnection(): Promise<{ success: boolean; shop?: any; error?: string }> {
     try {
       const data = await this.shopifyFetch<any>('shop.json');
-      this.logger.log(`Connected to Shopify store: ${data.shop?.name}`);
       return { success: true, shop: data.shop };
-    } catch (error) {
-      this.logger.error(`Shopify connection test failed: ${error.message}`);
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
