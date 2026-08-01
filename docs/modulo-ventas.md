@@ -2,10 +2,11 @@
 
 ## Funcionalidades del POS
 
-1. **Búsqueda de Productos:**
+1. **Búsqueda de Productos y Precios:**
    - Filtro rápido por Categoría (Balerinas, Botas, Sandalias, Yutes, Tacones, etc.).
    - Buscador por modelo o palabra clave de catálogo real (conectado a la base de datos PostgreSQL local).
    - Visualización horizontal compacta con la foto real del modelo sincronizada de Shopify (con fallback de emoji si no tiene).
+   - **Visualización de Precios y Descuentos de Shopify:** Muestra el precio original tachado (`compareAtPrice`), el precio final en verde y el porcentaje de descuento entre paréntesis `(-X%)` cuando el producto cuenta con rebaja configurada desde Shopify. Si no posee descuento, muestra el precio final estándar.
 
 2. **Selección de Tallas:**
    - Visualización dinámica de las tallas (35 a 42) y disponibilidad de stock real en tiempo real.

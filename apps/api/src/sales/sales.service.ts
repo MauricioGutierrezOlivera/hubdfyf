@@ -99,11 +99,11 @@ export class SalesService {
 
   async getPOSCatalog(storeId: string) {
     const cached = this.catalogCache.get(storeId);
-    if (cached && Date.now() - cached.timestamp < 60_000) {
+    if (cached && cached.data.length > 0 && Date.now() - cached.timestamp < 60_000) {
       return cached.data;
     }
 
-    const inventoryItems = await this.prisma.inventory.findMany({
+    let inventoryItems = await this.prisma.inventory.findMany({
       where: { 
         storeId,
         product: {
@@ -119,6 +119,7 @@ export class SalesService {
             family: true,
             size: true,
             price: true,
+            compareAtPrice: true,
             imageUrl: true,
             shopifyId: true,
           },
@@ -126,14 +127,40 @@ export class SalesService {
       },
     });
 
+    if (inventoryItems.length === 0) {
+      inventoryItems = await this.prisma.inventory.findMany({
+        where: { 
+          product: {
+            status: 'active',
+          },
+        },
+        select: {
+          quantity: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              family: true,
+              size: true,
+              price: true,
+              compareAtPrice: true,
+              imageUrl: true,
+              shopifyId: true,
+            },
+          },
+        },
+      });
+    }
+
     const grouped = new Map<
       string,
       {
         name: string;
         family: string | null;
         price: number;
+        compareAtPrice: number | null;
         imageUrl: string | null;
-        variants: { id: string; size: string; quantity: number; shopifyId: string }[];
+        variants: { id: string; size: string; quantity: number; shopifyId: string; price?: number; compareAtPrice?: number | null }[];
       }
     >();
 
@@ -144,15 +171,20 @@ export class SalesService {
           name: p.name,
           family: p.family,
           price: p.price,
+          compareAtPrice: p.compareAtPrice ?? null,
           imageUrl: p.imageUrl,
           variants: [],
         });
+      } else if (p.compareAtPrice && !grouped.get(p.name)!.compareAtPrice) {
+        grouped.get(p.name)!.compareAtPrice = p.compareAtPrice;
       }
       grouped.get(p.name)!.variants.push({
         id: p.id,
         size: p.size,
         quantity: item.quantity,
         shopifyId: p.shopifyId || '',
+        price: p.price,
+        compareAtPrice: p.compareAtPrice ?? null,
       });
     }
 
@@ -162,7 +194,9 @@ export class SalesService {
       item.variants.sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
     }
 
-    this.catalogCache.set(storeId, { timestamp: Date.now(), data: result });
+    if (result.length > 0) {
+      this.catalogCache.set(storeId, { timestamp: Date.now(), data: result });
+    }
     return result;
   }
 

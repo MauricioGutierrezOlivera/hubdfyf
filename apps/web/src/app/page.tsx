@@ -30,12 +30,15 @@ interface ProductVariant {
   size: string;
   quantity: number; // Stock in store
   shopifyId: string;
+  price?: number;
+  compareAtPrice?: number | null;
 }
 
 interface CatalogProduct {
   name: string;
   family: string | null;
   price: number;
+  compareAtPrice?: number | null;
   imageUrl?: string | null;
   variants: ProductVariant[];
 }
@@ -1704,9 +1707,25 @@ export default function AppContainer() {
                           <h3 className="font-bold text-gray-950 dark:text-white text-md leading-snug group-hover:text-dfyf-green transition-colors">
                             {product.name}
                           </h3>
-                          <p className="text-dfyf-green dark:text-green-400 font-black text-md mt-1">
-                            ${product.price.toLocaleString("es-CL")}
-                          </p>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {product.compareAtPrice && product.compareAtPrice > product.price ? (
+                              <>
+                                <span className="text-xs text-gray-400 dark:text-gray-400 line-through font-semibold">
+                                  ${product.compareAtPrice.toLocaleString("es-CL")}
+                                </span>
+                                <span className="text-dfyf-green dark:text-green-400 font-black text-md">
+                                  ${product.price.toLocaleString("es-CL")}
+                                </span>
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                                  (-{Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)}%)
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-dfyf-green dark:text-green-400 font-black text-md">
+                                ${product.price.toLocaleString("es-CL")}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Sizes & Stock Selector */}

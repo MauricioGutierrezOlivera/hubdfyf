@@ -100,8 +100,9 @@ model Product {
   style       String?  // Bailarina, Blucher, Tacón, Botín, Sandalia, Yute, Running, etc.
   color       String?
   size        String
-  price       Float
-  status      String   @default("active")
+  price          Float
+  compareAtPrice Float?
+  status         String   @default("active")
   imageUrl    String?
   
   createdAt   DateTime @default(now())
