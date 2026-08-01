@@ -72,3 +72,21 @@ Este módulo permite analizar el rendimiento de las vendedoras, tiendas y canale
   - **Curva de Tendencia Vectorial**: Línea SVG suavizada (Bezier) que conecta los totales mensuales con nodos interactivos.
   - **Ficha Flotante Interactiva (Hover)**: Al pasar el cursor sobre cualquier mes, despliega una tarjeta dinámica con el detalle completo en pesos, porcentajes por canal y pares vendidos.
 - **Tabla de Auditoría Numérica**: Desglose mensual ordenado al pie del gráfico.
+
+---
+
+### 4. Reporte de "Análisis de Stock en Bodega" (Exclusivo Administradores)
+- **Acceso Exclusivo**: Disponible únicamente para roles **ADMIN** (`SUPER_ADMIN` y `COUNTRY_ADMIN`) desde la barra de navegación lateral (**👟 Análisis Stock**).
+- **Tarjetas Resumen de Existencias**:
+  - Stock Total en Bodega (Unidades totales de calzado + accesorios).
+  - Stock Calzado (Pares totales).
+  - Modelos Únicos en Almacén.
+  - Estilos de Calzado Disponibles.
+- **Filtro Multi-Selección por Estilo (`🎨 FILTRAR POR ESTILO`)**:
+  - Selector desplegable interactivo en la cabecera del módulo que sustituye el botón único.
+  - Permite seleccionar "Todos los Estilos" o marcar múltiples estilos específicos (Bailarina, Blucher, Botín, Tacón, Sandalia, Yute, etc.), indicando el conteo de pares disponibles por estilo.
+  - Filtra dinámicamente tanto la matriz desagrupada por Estilo como por Modelo.
+  - Incluye etiquetas (*pills*) interactivas para eliminar filtros individuales o limpiar toda la selección de un solo clic.
+- **Matriz de Curva de Tallas (35 a 42)**:
+  - Visualización completa de existencias por talla.
+  - Ordenamiento ascendente/descendente interactivo haciendo clic en cualquier encabezado de columna.

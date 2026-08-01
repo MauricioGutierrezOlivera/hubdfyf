@@ -204,6 +204,8 @@ export default function AppContainer() {
   const [stockReportData, setStockReportData] = useState<any>(null);
   const [isLoadingStockReport, setIsLoadingStockReport] = useState<boolean>(false);
   const [stockViewMode, setStockViewMode] = useState<"TOTAL" | "BY_STYLE" | "BY_MODEL">("TOTAL");
+  const [selectedStockStyles, setSelectedStockStyles] = useState<string[]>([]);
+  const [isStockStyleDropdownOpen, setIsStockStyleDropdownOpen] = useState<boolean>(false);
   const [stockSortColumn, setStockSortColumn] = useState<string>("total");
   const [stockSortDir, setStockSortDir] = useState<"asc" | "desc">("desc");
 
@@ -4158,8 +4160,8 @@ export default function AppContainer() {
                     </p>
                   </div>
 
-                  {/* 3 View Filter Buttons: TOTAL, POR ESTILO, POR MODELO */}
-                  <div className="flex items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10">
+                  {/* 3 View Filter Buttons: TOTAL, FILTRAR POR ESTILO (Dropdown Multi-Select), POR MODELO */}
+                  <div className="flex items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10 relative">
                     <button
                       onClick={() => setStockViewMode("TOTAL")}
                       className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
@@ -4170,16 +4172,111 @@ export default function AppContainer() {
                     >
                       🌐 TOTAL
                     </button>
-                    <button
-                      onClick={() => setStockViewMode("BY_STYLE")}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                        stockViewMode === "BY_STYLE"
-                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
-                          : "text-gray-300 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      👠 POR ESTILO
-                    </button>
+
+                    {/* FILTRAR POR ESTILO Dropdown Multi-Select */}
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setIsStockStyleDropdownOpen(!isStockStyleDropdownOpen);
+                          if (stockViewMode === "TOTAL") {
+                            setStockViewMode("BY_STYLE");
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                          stockViewMode === "BY_STYLE" || selectedStockStyles.length > 0
+                            ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <span>👠 FILTRAR POR ESTILO</span>
+                        {selectedStockStyles.length > 0 ? (
+                          <span className="bg-white text-dfyf-green text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                            {selectedStockStyles.length}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] opacity-75">▼</span>
+                        )}
+                      </button>
+
+                      {/* Multi-Select Dropdown Menu */}
+                      {isStockStyleDropdownOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40"
+                            onClick={() => setIsStockStyleDropdownOpen(false)}
+                          />
+                          <div className="absolute right-0 md:left-0 mt-2 w-72 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-4 z-50 text-gray-900 dark:text-white space-y-3">
+                            <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-[#055740]">
+                              <span className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                Seleccionar Estilos
+                              </span>
+                              {selectedStockStyles.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedStockStyles([])}
+                                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                >
+                                  Ver Todos
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                              <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-xs font-bold">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStockStyles.length === 0}
+                                  onChange={() => setSelectedStockStyles([])}
+                                  className="w-4 h-4 accent-dfyf-green rounded cursor-pointer"
+                                />
+                                <span className="flex-1">🌐 Todos los Estilos</span>
+                              </label>
+
+                              {byStyle.map((sItem: any) => {
+                                const isChecked = selectedStockStyles.includes(sItem.style);
+                                return (
+                                  <label 
+                                    key={sItem.style} 
+                                    className="flex items-center justify-between p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-xs font-bold"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          if (isChecked) {
+                                            setSelectedStockStyles(selectedStockStyles.filter(s => s !== sItem.style));
+                                          } else {
+                                            setSelectedStockStyles([...selectedStockStyles, sItem.style]);
+                                          }
+                                        }}
+                                        className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                      />
+                                      <span className="truncate">{sItem.style}</span>
+                                    </div>
+                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full shrink-0">
+                                      {sItem.total} p.
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+
+                            <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-between items-center">
+                              <span className="text-[11px] font-semibold text-gray-400">
+                                {selectedStockStyles.length === 0 ? "Todos los estilos mostrados" : `${selectedStockStyles.length} de ${byStyle.length} activos`}
+                              </span>
+                              <button
+                                onClick={() => setIsStockStyleDropdownOpen(false)}
+                                className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
+                              >
+                                Aplicar
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
                     <button
                       onClick={() => setStockViewMode("BY_MODEL")}
                       className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
@@ -4255,7 +4352,13 @@ export default function AppContainer() {
                 {/* VIEW MODE 2 & 3: BY_STYLE or BY_MODEL MATRIX TABLE */}
                 {(stockViewMode === "BY_STYLE" || stockViewMode === "BY_MODEL") && (() => {
                   const rawItems = stockViewMode === "BY_STYLE" ? byStyle : byModel;
-                  const sortedItems = getSortedData(rawItems);
+                  const filteredItems = selectedStockStyles.length === 0
+                    ? rawItems
+                    : rawItems.filter((item: any) => {
+                        const itemStyle = item.style || item.family || "";
+                        return selectedStockStyles.includes(itemStyle);
+                      });
+                  const sortedItems = getSortedData(filteredItems);
 
                   return (
                     <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-6">
@@ -4272,6 +4375,37 @@ export default function AppContainer() {
                           ↕️ Clic en encabezado para ordenar ↑ / ↓
                         </div>
                       </div>
+
+                      {/* Active Style Filter Badges */}
+                      {selectedStockStyles.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap bg-emerald-50/70 dark:bg-emerald-950/40 p-3 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/60">
+                          <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">
+                            🎨 Filtrando Estilos ({selectedStockStyles.length}):
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {selectedStockStyles.map((style) => (
+                              <span 
+                                key={style}
+                                className="inline-flex items-center gap-1 bg-white dark:bg-[#033b2b] text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm"
+                              >
+                                {style}
+                                <button
+                                  onClick={() => setSelectedStockStyles(selectedStockStyles.filter(s => s !== style))}
+                                  className="hover:text-red-500 font-black cursor-pointer ml-0.5"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                            <button
+                              onClick={() => setSelectedStockStyles([])}
+                              className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer ml-1"
+                            >
+                              Limpiar Filtros
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
