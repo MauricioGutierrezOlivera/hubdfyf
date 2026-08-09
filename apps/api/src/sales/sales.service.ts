@@ -330,13 +330,50 @@ export class SalesService {
       }
     }
 
+    // 1. Create customer in Shopify
+    let shopifyCustomerId: string | null = null;
+    try {
+      const shopifyCust = await this.shopifyService.createCustomer({
+        name: data.name,
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+        rut: cleanRut || data.rut,
+      });
+      if (shopifyCust && shopifyCust.id) {
+        shopifyCustomerId = String(shopifyCust.id);
+        this.logger.log(`Created customer in Shopify with ID: ${shopifyCustomerId}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Could not sync new customer to Shopify: ${err}`);
+    }
+
+    // 2. Create customer in DB
     return this.prisma.customer.create({
       data: {
         name: data.name,
         rut: cleanRut,
-        email: data.email || null,
+        email: data.email ? data.email.toLowerCase().trim() : null,
         phone: data.phone || null,
+        shopifyId: shopifyCustomerId,
       }
+    });
+  }
+
+  async deleteCustomer(id: string) {
+    const existing = await this.prisma.customer.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('El cliente especificado no existe.');
+    }
+
+    // Disconnect sales from customer before deleting to prevent foreign key errors
+    await this.prisma.sale.updateMany({
+      where: { customerId: id },
+      data: { customerId: null },
+    });
+
+    // Delete customer from local DB only (do not delete from Shopify)
+    return this.prisma.customer.delete({
+      where: { id },
     });
   }
 
@@ -617,8 +654,9 @@ export class SalesService {
     let currentMonthAmount = 0;
     let currentMonthShoesUnits = 0;
 
-    // Track seller contribution for the selected period (shoes only)
+    // Track seller contribution for the selected period
     const sellerUnitsMap = new Map<string, number>();
+    const sellerRevenueMap = new Map<string, number>();
 
     for (const sale of sales) {
       const hasPositive = sale.items.some(it => it.quantity > 0);
@@ -663,9 +701,11 @@ export class SalesService {
         const itemNetPrice = salePrice * item.quantity;
         currentMonthAmount += itemNetPrice;
 
+        const seller = sale.vendedor || 'ONLINE';
+        sellerRevenueMap.set(seller, (sellerRevenueMap.get(seller) || 0) + itemNetPrice);
+
         if (!isProductSock && eventType === 'Venta') {
           currentMonthShoesUnits += item.quantity;
-          const seller = sale.vendedor || 'ONLINE';
           sellerUnitsMap.set(seller, (sellerUnitsMap.get(seller) || 0) + item.quantity);
         }
 
@@ -908,9 +948,11 @@ export class SalesService {
 
     for (const [sellerName, units] of sortedSellers) {
       const percentageOfTotal = totalSellerUnits > 0 ? parseFloat(((units / totalSellerUnits) * 100).toFixed(1)) : 0;
+      const revenue = sellerRevenueMap.get(sellerName) || 0;
       breakdownBySeller.push({
         sellerName,
         units,
+        revenue,
         percentageOfTotal,
         color: colors[colorIdx % colors.length],
       });
@@ -1329,6 +1371,8 @@ export class SalesService {
         sizes: Record<string, number>;
         total: number;
         modelsSet: Set<string>;
+        price: number;
+        compareAtPrice: number | null;
       }
     >();
 
@@ -1339,6 +1383,8 @@ export class SalesService {
         style: string;
         sizes: Record<string, number>;
         total: number;
+        price: number;
+        compareAtPrice: number | null;
       }
     >();
 
@@ -1357,6 +1403,8 @@ export class SalesService {
       const styleName = inv.product.style || inv.product.family || 'Calzado General';
       const modelName = inv.product.name.split('(')[0].trim();
       const size = inv.product.size || 'UN';
+      const prodPrice = inv.product.price || 0;
+      const prodComparePrice = inv.product.compareAtPrice || null;
 
       // Group by Style
       if (!styleMap.has(styleName)) {
@@ -1365,12 +1413,20 @@ export class SalesService {
           sizes: {},
           total: 0,
           modelsSet: new Set(),
+          price: prodPrice,
+          compareAtPrice: prodComparePrice,
         });
       }
       const sEntry = styleMap.get(styleName)!;
       sEntry.total += inv.quantity;
       sEntry.sizes[size] = (sEntry.sizes[size] || 0) + inv.quantity;
       sEntry.modelsSet.add(modelName);
+      if (prodComparePrice && (!sEntry.compareAtPrice || prodComparePrice > sEntry.compareAtPrice)) {
+        sEntry.compareAtPrice = prodComparePrice;
+      }
+      if (prodPrice && (!sEntry.price || prodPrice < sEntry.price)) {
+        sEntry.price = prodPrice;
+      }
 
       // Group by Model
       if (!modelMap.has(modelName)) {
@@ -1379,29 +1435,57 @@ export class SalesService {
           style: styleName,
           sizes: {},
           total: 0,
+          price: prodPrice,
+          compareAtPrice: prodComparePrice,
         });
       }
       const mEntry = modelMap.get(modelName)!;
       mEntry.total += inv.quantity;
       mEntry.sizes[size] = (mEntry.sizes[size] || 0) + inv.quantity;
+      if (prodComparePrice && (!mEntry.compareAtPrice || prodComparePrice > mEntry.compareAtPrice)) {
+        mEntry.compareAtPrice = prodComparePrice;
+      }
+      if (prodPrice && (!mEntry.price || prodPrice < mEntry.price)) {
+        mEntry.price = prodPrice;
+      }
     }
 
     const byStyle = Array.from(styleMap.values())
-      .map((s) => ({
-        style: s.style,
-        total: s.total,
-        sizes: s.sizes,
-        modelCount: s.modelsSet.size,
-      }))
+      .map((s) => {
+        const originalPrice = (s.compareAtPrice && s.compareAtPrice > s.price) ? s.compareAtPrice : s.price;
+        const currentPrice = s.price;
+        const discount = originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
+        return {
+          style: s.style,
+          total: s.total,
+          sizes: s.sizes,
+          modelCount: s.modelsSet.size,
+          price: currentPrice,
+          compareAtPrice: s.compareAtPrice,
+          originalPrice,
+          currentPrice,
+          discount,
+        };
+      })
       .sort((a, b) => b.total - a.total);
 
     const byModel = Array.from(modelMap.values())
-      .map((m) => ({
-        model: m.model,
-        style: m.style,
-        total: m.total,
-        sizes: m.sizes,
-      }))
+      .map((m) => {
+        const originalPrice = (m.compareAtPrice && m.compareAtPrice > m.price) ? m.compareAtPrice : m.price;
+        const currentPrice = m.price;
+        const discount = originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
+        return {
+          model: m.model,
+          style: m.style,
+          total: m.total,
+          sizes: m.sizes,
+          price: currentPrice,
+          compareAtPrice: m.compareAtPrice,
+          originalPrice,
+          currentPrice,
+          discount,
+        };
+      })
       .sort((a, b) => b.total - a.total);
 
     return {

@@ -133,6 +133,12 @@ export default function AppContainer() {
   const [filterRut, setFilterRut] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
   const [filterSize, setFilterSize] = useState("");
+  const [selectedCustomerSizes, setSelectedCustomerSizes] = useState<string[]>([]);
+  const [isSizeDropdownOpen, setIsSizeDropdownOpen] = useState(false);
+
+  // Email Export Modal States (Admin only)
+  const [isEmailExportModalOpen, setIsEmailExportModalOpen] = useState(false);
+  const [copiedEmailStatus, setCopiedEmailStatus] = useState(false);
 
   // Customers Sorting and Edit Modal States
   const [sortField, setSortField] = useState<"zapatosComprados" | "fechaUltimaCompra" | null>(null);
@@ -144,6 +150,23 @@ export default function AppContainer() {
   const [editPhone, setEditPhone] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // New Customer Modal States
+  const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerRut, setNewCustomerRut] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [isSavingNewCustomer, setIsSavingNewCustomer] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
+
+  // Delete Customer Modal States
+  const [deletingCustomer, setDeletingCustomer] = useState<any | null>(null);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
+  const [deleteCustomerError, setDeleteCustomerError] = useState<string | null>(null);
+
+  // Sales Report States
+  const [isSellerRevenueModalOpen, setIsSellerRevenueModalOpen] = useState(false);
 
   // Returns / Exchanges States
   const [exchangeSearchQuery, setExchangeSearchQuery] = useState("");
@@ -206,8 +229,39 @@ export default function AppContainer() {
   const [stockViewMode, setStockViewMode] = useState<"TOTAL" | "BY_STYLE" | "BY_MODEL">("TOTAL");
   const [selectedStockStyles, setSelectedStockStyles] = useState<string[]>([]);
   const [isStockStyleDropdownOpen, setIsStockStyleDropdownOpen] = useState<boolean>(false);
+  const [selectedStockDiscounts, setSelectedStockDiscounts] = useState<number[]>([]);
+  const [selectedStockQtys, setSelectedStockQtys] = useState<number[]>([]);
+  const [isStockDiscountDropdownOpen, setIsStockDiscountDropdownOpen] = useState<boolean>(false);
+  const [isStockQtyDropdownOpen, setIsStockQtyDropdownOpen] = useState<boolean>(false);
+  const [stockDropdownPos, setStockDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [stockSortColumn, setStockSortColumn] = useState<string>("total");
   const [stockSortDir, setStockSortDir] = useState<"asc" | "desc">("desc");
+
+  const openStockDropdown = (type: "style" | "discount" | "qty", e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = type === "qty" ? 240 : 256;
+    const calculatedLeft = Math.max(16, Math.min(rect.left - 40, window.innerWidth - menuWidth - 16));
+    
+    setStockDropdownPos({
+      top: rect.bottom + 8,
+      left: calculatedLeft,
+    });
+
+    if (type === "style") {
+      setIsStockStyleDropdownOpen(!isStockStyleDropdownOpen);
+      setIsStockDiscountDropdownOpen(false);
+      setIsStockQtyDropdownOpen(false);
+    } else if (type === "discount") {
+      setIsStockDiscountDropdownOpen(!isStockDiscountDropdownOpen);
+      setIsStockStyleDropdownOpen(false);
+      setIsStockQtyDropdownOpen(false);
+    } else if (type === "qty") {
+      setIsStockQtyDropdownOpen(!isStockQtyDropdownOpen);
+      setIsStockStyleDropdownOpen(false);
+      setIsStockDiscountDropdownOpen(false);
+    }
+  };
 
   // Admin Section States
   const [users, setUsers] = useState<User[]>([]);
@@ -2647,11 +2701,15 @@ export default function AppContainer() {
 
           {/* TAB 3: Customers Screen */}
           {activeTab === "customers" && (() => {
+            const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "COUNTRY_ADMIN";
+
             const filteredCustomers = customersList.filter(c => {
               const matchName = !filterName || c.name.toLowerCase().includes(filterName.toLowerCase());
               const matchRut = !filterRut || (c.rut && c.rut.toLowerCase().includes(filterRut.toLowerCase()));
               const matchEmail = !filterEmail || (c.email && c.email.toLowerCase().includes(filterEmail.toLowerCase()));
-              const matchSize = !filterSize || (c.tallasCompradas && c.tallasCompradas.split(',').map((s: string) => s.trim()).includes(filterSize.trim()));
+              const matchSize = selectedCustomerSizes.length === 0 || (
+                c.tallasCompradas && c.tallasCompradas.split(',').map((s: string) => s.trim()).some((sz: string) => selectedCustomerSizes.includes(sz))
+              );
               return matchName && matchRut && matchEmail && matchSize;
             });
 
@@ -2674,6 +2732,23 @@ export default function AppContainer() {
               return sortDirection === "asc" ? valA - valB : valB - valA;
             });
 
+            // Extract unique valid emails from current filtered list
+            const filteredEmails = Array.from(
+              new Set(
+                sortedCustomers
+                  .map((c) => (c.email ? c.email.trim().toLowerCase() : ""))
+                  .filter((e) => e && e.length > 3 && e.includes("@"))
+              )
+            );
+            const formattedEmailsString = filteredEmails.join(", ");
+
+            const handleCopyEmails = () => {
+              if (!formattedEmailsString) return;
+              navigator.clipboard.writeText(formattedEmailsString);
+              setCopiedEmailStatus(true);
+              setTimeout(() => setCopiedEmailStatus(false), 2500);
+            };
+
             const toggleSort = (field: "zapatosComprados" | "fechaUltimaCompra") => {
               if (sortField === field) {
                 setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -2694,12 +2769,10 @@ export default function AppContainer() {
 
             const handleSaveEditCustomer = async (e: React.FormEvent) => {
               e.preventDefault();
-              if (!editName.trim()) {
-                setEditError("El nombre es requerido.");
-                return;
-              }
+              if (!editingCustomer) return;
               setIsSavingEdit(true);
               setEditError("");
+
               try {
                 const res = await fetch(`${API_BASE_URL}/admin/customers/${editingCustomer.id}`, {
                   method: "PATCH",
@@ -2728,13 +2801,101 @@ export default function AppContainer() {
               }
             };
 
+            const handleSaveNewCustomer = async (e: React.FormEvent) => {
+              e.preventDefault();
+              setIsSavingNewCustomer(true);
+              setNewCustomerError(null);
+
+              try {
+                const res = await fetch(`${API_BASE_URL}/admin/customers`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-user-id": currentUser?.id || "",
+                  },
+                  body: JSON.stringify({
+                    name: newCustomerName,
+                    rut: newCustomerRut || null,
+                    email: newCustomerEmail || null,
+                    phone: newCustomerPhone || null,
+                  }),
+                });
+
+                if (res.ok) {
+                  await fetchCustomersList();
+                  setIsNewCustomerModalOpen(false);
+                } else {
+                  const errData = await res.json();
+                  setNewCustomerError(errData.message || "Error al registrar el nuevo cliente.");
+                }
+              } catch (err) {
+                setNewCustomerError("Ocurrió un error al conectar con el servidor.");
+              } finally {
+                setIsSavingNewCustomer(false);
+              }
+            };
+
+            const handleConfirmDeleteCustomer = async () => {
+              if (!deletingCustomer) return;
+              setIsDeletingCustomer(true);
+              setDeleteCustomerError(null);
+
+              try {
+                const res = await fetch(`${API_BASE_URL}/admin/customers/${deletingCustomer.id}`, {
+                  method: "DELETE",
+                  headers: {
+                    "x-user-id": currentUser?.id || "",
+                  },
+                });
+
+                if (res.ok) {
+                  await fetchCustomersList();
+                  setDeletingCustomer(null);
+                } else {
+                  const errData = await res.json();
+                  setDeleteCustomerError(errData.message || "Error al eliminar el cliente.");
+                }
+              } catch (err) {
+                setDeleteCustomerError("Ocurrió un error al conectar con el servidor.");
+              } finally {
+                setIsDeletingCustomer(false);
+              }
+            };
+
             return (
               <div className="h-full overflow-y-auto pr-2 pb-12">
                 <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-8 shadow-sm space-y-6 relative">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-gray-900 dark:text-white">Directorio de Clientes</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Base de datos limpia y unificada de clientela online y offline</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          setCopiedEmailStatus(false);
+                          setIsEmailExportModalOpen(true);
+                        }}
+                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+                        title="Exportar correos de clientes filtrados para Email Marketing"
+                      >
+                        <span>📧</span> EXPORTAR CORREOS ({filteredEmails.length})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setNewCustomerName("");
+                        setNewCustomerRut("");
+                        setNewCustomerEmail("");
+                        setNewCustomerPhone("");
+                        setNewCustomerError(null);
+                        setIsNewCustomerModalOpen(true);
+                      }}
+                      className="px-4 py-2.5 bg-dfyf-green hover:bg-[#055740] text-white font-black rounded-2xl text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+                    >
+                      <span>👤+</span> NUEVO CLIENTE
+                    </button>
                   </div>
                 </div>
 
@@ -2770,18 +2931,83 @@ export default function AppContainer() {
                       className="w-full px-3 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#033b2b] text-xs text-gray-900 dark:text-white focus:outline-none"
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Filtrar por Talla</label>
-                    <select
-                      value={filterSize}
-                      onChange={(e) => setFilterSize(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#033b2b] text-xs text-gray-900 dark:text-white focus:outline-none cursor-pointer"
+                  <div className="relative">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Filtrar por Tallas</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsSizeDropdownOpen(!isSizeDropdownOpen)}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#033b2b] text-xs text-left font-semibold text-gray-900 dark:text-white flex justify-between items-center cursor-pointer shadow-xs"
                     >
-                      <option value="">Todas las tallas</option>
-                      {["35", "36", "37", "38", "39", "40", "41", "42"].map(s => (
-                        <option key={s} value={s}>Talla {s}</option>
-                      ))}
-                    </select>
+                      <span className="truncate">
+                        {selectedCustomerSizes.length === 0 ? "Todas las tallas" : `Tallas (${selectedCustomerSizes.join(", ")})`}
+                      </span>
+                      <span className="text-[10px] text-gray-400 ml-1">{isSizeDropdownOpen ? "▲" : "▼"}</span>
+                    </button>
+
+                    {isSizeDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-20" onClick={() => setIsSizeDropdownOpen(false)} />
+                        <div className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-3 z-30 space-y-2 text-xs">
+                          <div className="flex justify-between items-center pb-1.5 border-b border-gray-100 dark:border-[#055740]">
+                            <span className="font-black text-[10px] uppercase text-gray-400 tracking-wider">Selección Múltiple</span>
+                            {selectedCustomerSizes.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCustomerSizes([])}
+                                className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                              >
+                                Ver Todas
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                            <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold">
+                              <input
+                                type="checkbox"
+                                checked={selectedCustomerSizes.length === 0}
+                                onChange={() => setSelectedCustomerSizes([])}
+                                className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                              />
+                              <span>🌐 Todas las tallas</span>
+                            </label>
+
+                            {["35", "36", "37", "38", "39", "40", "41", "42"].map((s) => {
+                              const isChecked = selectedCustomerSizes.includes(s);
+                              return (
+                                <label key={s} className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCustomerSizes.length > 0 && isChecked}
+                                    onChange={() => {
+                                      if (selectedCustomerSizes.length === 0) {
+                                        setSelectedCustomerSizes([s]);
+                                      } else if (isChecked) {
+                                        setSelectedCustomerSizes(selectedCustomerSizes.filter(val => val !== s));
+                                      } else {
+                                        setSelectedCustomerSizes([...selectedCustomerSizes, s]);
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                  />
+                                  <span>👟 Talla {s}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+
+                          <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setIsSizeDropdownOpen(false)}
+                              className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
+                            >
+                              Listo
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2810,7 +3036,7 @@ export default function AppContainer() {
                             >
                               Zapatos Comprados {sortField === "zapatosComprados" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
                             </th>
-                            <th className="p-4">Tallas</th>
+                            <th className="p-4 text-center">Tallas</th>
                             <th 
                               className="p-4 text-center cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                               onClick={() => toggleSort("fechaUltimaCompra")}
@@ -2832,17 +3058,29 @@ export default function AppContainer() {
                               <td className="p-4 text-center font-black text-gray-900 dark:text-white">
                                 {cust.zapatosComprados}
                               </td>
-                              <td className="p-4 font-bold text-dfyf-green">{cust.tallasCompradas}</td>
+                              <td className="p-4 text-center font-bold text-dfyf-green">{cust.tallasCompradas}</td>
                               <td className="p-4 text-center text-gray-500 dark:text-gray-400 text-xs">
                                 {cust.fechaUltimaCompra ? new Date(cust.fechaUltimaCompra).toLocaleDateString("es-CL") : "-"}
                               </td>
                               <td className="p-4 text-center">
-                                <button
-                                  onClick={() => openEditCustomerModal(cust)}
-                                  className="px-3 py-1.5 bg-dfyf-green hover:bg-[#055740] text-white font-bold rounded-xl text-xs shadow-sm transition-colors cursor-pointer"
-                                >
-                                  Editar
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => openEditCustomerModal(cust)}
+                                    className="px-3 py-1.5 bg-dfyf-green hover:bg-[#055740] text-white font-bold rounded-xl text-xs shadow-sm transition-colors cursor-pointer"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setDeletingCustomer(cust);
+                                      setDeleteCustomerError(null);
+                                    }}
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 rounded-xl text-xs transition-colors cursor-pointer border border-red-200 dark:border-red-800/60"
+                                    title="Eliminar cliente"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -2851,6 +3089,90 @@ export default function AppContainer() {
                     </div>
                   )}
                 </div>
+
+                {/* NEW CUSTOMER MODAL */}
+                {isNewCustomerModalOpen && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6">
+                      <div>
+                        <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                          <span>👤+</span> Registrar Nuevo Cliente
+                        </h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">El cliente se registrará en la base de datos unificada y en Shopify</p>
+                      </div>
+
+                      <form onSubmit={handleSaveNewCustomer} className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Nombre Completo *</label>
+                          <input
+                            type="text"
+                            required
+                            value={newCustomerName}
+                            onChange={(e) => setNewCustomerName(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#055740] rounded-xl bg-gray-50 dark:bg-[#044c38] text-sm text-gray-900 dark:text-white focus:outline-none"
+                            placeholder="Nombre y Apellido"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">RUT (Opcional)</label>
+                          <input
+                            type="text"
+                            value={newCustomerRut}
+                            onChange={(e) => setNewCustomerRut(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#055740] rounded-xl bg-gray-50 dark:bg-[#044c38] text-sm text-gray-900 dark:text-white focus:outline-none"
+                            placeholder="Sin puntos ni guión (ej: 12345678k)"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Correo Electrónico (Opcional)</label>
+                          <input
+                            type="email"
+                            value={newCustomerEmail}
+                            onChange={(e) => setNewCustomerEmail(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#055740] rounded-xl bg-gray-50 dark:bg-[#044c38] text-sm text-gray-900 dark:text-white focus:outline-none"
+                            placeholder="correo@ejemplo.com"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Teléfono (Opcional)</label>
+                          <input
+                            type="text"
+                            value={newCustomerPhone}
+                            onChange={(e) => setNewCustomerPhone(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#055740] rounded-xl bg-gray-50 dark:bg-[#044c38] text-sm text-gray-900 dark:text-white focus:outline-none"
+                            placeholder="Ej: 912345678"
+                          />
+                        </div>
+
+                        {newCustomerError && (
+                          <div className="text-red-500 text-xs font-semibold bg-red-50 dark:bg-red-950/20 p-3 rounded-xl border border-red-200 dark:border-red-900/30">
+                            ⚠️ {newCustomerError}
+                          </div>
+                        )}
+
+                        <div className="flex space-x-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsNewCustomerModalOpen(false)}
+                            className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 font-bold rounded-xl text-sm transition-colors cursor-pointer text-center"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isSavingNewCustomer}
+                            className="flex-1 py-2.5 bg-dfyf-green hover:bg-[#055740] disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer text-center"
+                          >
+                            {isSavingNewCustomer ? "Guardando..." : "Crear Cliente"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
 
                 {/* EDIT CUSTOMER MODAL */}
                 {editingCustomer && (
@@ -2933,6 +3255,115 @@ export default function AppContainer() {
                     </div>
                   </div>
                 )}
+
+                {/* DELETE CUSTOMER CONFIRMATION MODAL */}
+                {deletingCustomer && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6">
+                      <div>
+                        <h2 className="text-xl font-black text-red-600 dark:text-red-400 flex items-center gap-2">
+                          <span>⚠️</span> ¿Seguro quiere eliminar el cliente?
+                        </h2>
+                        <p className="text-sm text-gray-700 dark:text-gray-200 font-semibold mt-3">
+                          Estás a punto de eliminar a <span className="font-black text-gray-900 dark:text-white">"{deletingCustomer.name}"</span> de la base de datos local.
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                          Esta acción removerá la ficha del sistema POS local. El cliente no será eliminado de Shopify.
+                        </p>
+                      </div>
+
+                      {deleteCustomerError && (
+                        <div className="text-red-500 text-xs font-semibold bg-red-50 dark:bg-red-950/20 p-3 rounded-xl border border-red-200 dark:border-red-900/30">
+                          ⚠️ {deleteCustomerError}
+                        </div>
+                      )}
+
+                      <div className="flex space-x-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeletingCustomer(null)}
+                          className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 font-bold rounded-xl text-sm transition-colors cursor-pointer text-center"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmDeleteCustomer}
+                          disabled={isDeletingCustomer}
+                          className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer text-center shadow-md"
+                        >
+                          {isDeletingCustomer ? "Eliminando..." : "Eliminar Cliente"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* EMAIL EXPORT MODAL FOR ADMIN */}
+                {isEmailExportModalOpen && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-8 max-w-xl w-full shadow-2xl space-y-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>📧</span> Exportar Correos para Email Marketing
+                          </h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {filteredEmails.length} correo{filteredEmails.length === 1 ? "" : "s"} único{filteredEmails.length === 1 ? "" : "s"} encontrado{filteredEmails.length === 1 ? "" : "s"} entre los {sortedCustomers.length} clientes filtrados.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setIsEmailExportModalOpen(false)}
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-lg font-bold cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                          Correos separados por coma y espacio (listos para copiar e insertar en Mailchimp, Klaviyo, etc.):
+                        </label>
+                        <textarea
+                          readOnly
+                          rows={6}
+                          value={formattedEmailsString || "No hay correos registrados en los clientes actualmente filtrados."}
+                          className="w-full p-4 border border-gray-200 dark:border-[#055740] rounded-2xl bg-gray-50 dark:bg-[#044c38] text-xs font-mono text-gray-900 dark:text-white focus:outline-none resize-none leading-relaxed"
+                        />
+                      </div>
+
+                      <div className="flex space-x-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEmailExportModalOpen(false)}
+                          className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 font-bold rounded-xl text-sm transition-colors cursor-pointer text-center"
+                        >
+                          Cerrar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCopyEmails}
+                          disabled={!formattedEmailsString}
+                          className={`flex-1 py-3 font-black rounded-xl text-sm transition-all cursor-pointer text-center shadow-md flex items-center justify-center gap-2 ${
+                            copiedEmailStatus 
+                              ? "bg-emerald-600 text-white" 
+                              : "bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                          }`}
+                        >
+                          {copiedEmailStatus ? (
+                            <>
+                              <span>✅</span> ¡Copiado al Portapapeles!
+                            </>
+                          ) : (
+                            <>
+                              <span>📋</span> Copiar al Portapapeles
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 </div>
               </div>
             );
@@ -2991,6 +3422,30 @@ export default function AppContainer() {
               return months[m - 1] || "";
             };
 
+            const sellerRevenueBreakdown = (() => {
+              const map = new Map<string, { totalRevenue: number; totalUnits: number }>();
+              (reportData?.items || []).forEach((item: any) => {
+                const seller = item.vendedor || "ONLINE";
+                const netAmount = (item.salePrice || 0) * (item.quantity || 0);
+                const curr = map.get(seller) || { totalRevenue: 0, totalUnits: 0 };
+                map.set(seller, {
+                  totalRevenue: curr.totalRevenue + netAmount,
+                  totalUnits: curr.totalUnits + (!item.isSock && item.quantity > 0 ? item.quantity : 0),
+                });
+              });
+
+              const grandTotalRevenue = (reportData?.summary?.totalAmount ?? 0);
+
+              return Array.from(map.entries())
+                .map(([sellerName, data]) => ({
+                  sellerName,
+                  totalRevenue: data.totalRevenue,
+                  totalUnits: data.totalUnits,
+                  percentage: grandTotalRevenue > 0 ? (data.totalRevenue / grandTotalRevenue) * 100 : 0,
+                }))
+                .sort((a, b) => b.totalRevenue - a.totalRevenue);
+            })();
+
             return (
               <div className="h-full overflow-y-auto pr-2 pb-12">
                 <div className="space-y-5">
@@ -3006,6 +3461,16 @@ export default function AppContainer() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {isAdmin && (
+                          <button
+                            onClick={() => setIsSellerRevenueModalOpen(true)}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 h-9"
+                            title="Ver total vendido en pesos por vendedora en el mes filtrado"
+                          >
+                            <span>💰</span> Venta por Vendedora
+                          </button>
+                        )}
+
                         {isAdmin ? (
                           <>
                             <select
@@ -3320,6 +3785,95 @@ export default function AppContainer() {
                     </div>
                   )}
                 </div>
+
+                {/* SELLER REVENUE IN PESOS POPUP MODAL (ADMIN ONLY) */}
+                {isSellerRevenueModalOpen && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-7 max-w-lg w-full shadow-2xl space-y-6">
+                      {/* Modal Header */}
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>💰</span> Venta en Pesos por Vendedora
+                          </h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
+                            Recaudación total correspondiente a {getMonthName(reportMonth)} {reportYear}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setIsSellerRevenueModalOpen(false)}
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-lg font-bold cursor-pointer p-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Summary Total Card */}
+                      <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/60 rounded-2xl p-4 flex justify-between items-center">
+                        <div>
+                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-800 dark:text-emerald-300 block">Total Facturado en el Mes</span>
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">Consolidado de todas las vendedoras y canales</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-black text-emerald-950 dark:text-emerald-100 block">
+                            ${(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Sellers Revenue Table */}
+                      <div className="border border-gray-200 dark:border-[#055740] rounded-2xl overflow-hidden shadow-xs max-h-80 overflow-y-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="sticky top-0 bg-gray-50 dark:bg-[#044c38] z-10 select-none border-b border-gray-200 dark:border-[#055740]">
+                            <tr className="text-gray-500 dark:text-gray-300 font-black uppercase tracking-wider">
+                              <th className="p-3.5">Vendedora</th>
+                              <th className="p-3.5 text-center">Pares</th>
+                              <th className="p-3.5 text-center">% Part.</th>
+                              <th className="p-3.5 text-right">Total Vendido</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
+                            {sellerRevenueBreakdown.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="p-6 text-center text-gray-400 font-bold">
+                                  No se registraron ventas en {getMonthName(reportMonth)} {reportYear}.
+                                </td>
+                              </tr>
+                            ) : (
+                              sellerRevenueBreakdown.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50/60 dark:hover:bg-white/5 transition-colors align-middle">
+                                  <td className="p-3.5 font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green shrink-0 inline-block"></span>
+                                    <span>{row.sellerName}</span>
+                                  </td>
+                                  <td className="p-3.5 text-center font-bold text-gray-600 dark:text-gray-300">
+                                    {row.totalUnits} p.
+                                  </td>
+                                  <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
+                                    {row.percentage.toFixed(1)}%
+                                  </td>
+                                  <td className="p-3.5 text-right font-black text-gray-950 dark:text-white text-sm">
+                                    ${row.totalRevenue.toLocaleString("es-CL")}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Modal Actions */}
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => setIsSellerRevenueModalOpen(false)}
+                          className="px-6 py-2.5 bg-dfyf-green hover:bg-[#055740] text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer"
+                        >
+                          Cerrar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -4004,11 +4558,11 @@ export default function AppContainer() {
                           <th className="p-3.5 pl-4 rounded-l-2xl">Estilo</th>
                           <th className="p-3.5 text-right">Pares</th>
                           <th className="p-3.5 text-right">% Mix</th>
-                          <th className="p-3.5 text-right">Facturación</th>
+                          <th className="p-3.5 text-right">Venta</th>
                           {['35', '36', '37', '38', '39', '40', '41', '42'].map(s => (
-                            <th key={s} className="p-3.5 text-center font-black bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Talla {s}</th>
+                            <th key={s} className="p-3 text-center font-black bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">{s}</th>
                           ))}
-                          <th className="p-3.5 pr-4 rounded-r-2xl">Modelo Top Venta</th>
+                          <th className="p-3.5 pr-4 rounded-r-2xl min-w-[220px]">Modelo Top Venta</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
@@ -4050,13 +4604,16 @@ export default function AppContainer() {
                                 );
                               })}
 
-                              <td className="p-3.5 pr-4 text-gray-700 dark:text-gray-300 font-bold align-middle">
+                              <td className="p-3.5 pr-4 text-gray-700 dark:text-gray-300 font-bold align-middle min-w-[220px]">
                                 {row.topModels.length > 0 ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-white/10 rounded-lg text-xs">
-                                    🏆 {row.topModels[0].model} <span className="text-[10px] text-gray-500 font-normal">({row.topModels[0].units} un)</span>
+                                  <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50/80 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-200 rounded-xl text-xs font-black border border-emerald-200/70 dark:border-emerald-800/70 shadow-sm w-full justify-between">
+                                    <span className="truncate">🏆 {row.topModels[0].model}</span>
+                                    <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-[#033b2b] px-2 py-0.5 rounded-md shrink-0 shadow-xs border border-emerald-200 dark:border-emerald-700">
+                                      {row.topModels[0].units} un
+                                    </span>
                                   </span>
                                 ) : (
-                                  "-"
+                                  <span className="text-gray-400 font-normal">-</span>
                                 )}
                               </td>
                             </tr>
@@ -4123,15 +4680,30 @@ export default function AppContainer() {
                 let valA: any = 0;
                 let valB: any = 0;
 
-                if (stockSortColumn === "name") {
-                  valA = (a.style || a.model || "").toLowerCase();
-                  valB = (b.style || b.model || "").toLowerCase();
+                if (stockSortColumn === "style") {
+                  valA = (a.style || "").toLowerCase();
+                  valB = (b.style || "").toLowerCase();
+                  return stockSortDir === "asc"
+                    ? valA.localeCompare(valB)
+                    : valB.localeCompare(valA);
+                } else if (stockSortColumn === "model" || stockSortColumn === "name") {
+                  valA = (a.model || "").toLowerCase();
+                  valB = (b.model || "").toLowerCase();
                   return stockSortDir === "asc"
                     ? valA.localeCompare(valB)
                     : valB.localeCompare(valA);
                 } else if (stockSortColumn === "total") {
                   valA = a.total || 0;
                   valB = b.total || 0;
+                } else if (stockSortColumn === "originalPrice") {
+                  valA = a.originalPrice || a.price || 0;
+                  valB = b.originalPrice || b.price || 0;
+                } else if (stockSortColumn === "currentPrice") {
+                  valA = a.currentPrice || a.price || 0;
+                  valB = b.currentPrice || b.price || 0;
+                } else if (stockSortColumn === "discount") {
+                  valA = a.discount || 0;
+                  valB = b.discount || 0;
                 } else {
                   valA = a.sizes[stockSortColumn] || 0;
                   valB = b.sizes[stockSortColumn] || 0;
@@ -4145,7 +4717,7 @@ export default function AppContainer() {
 
             return (
               <div className="h-full overflow-y-auto pr-2 pb-12 space-y-8">
-                {/* Header Title & 3 Filter Toggle Buttons */}
+                {/* Header Title & 2 Summary Metric Cards */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-8 rounded-3xl text-white shadow-xl">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -4160,227 +4732,66 @@ export default function AppContainer() {
                     </p>
                   </div>
 
-                  {/* 3 View Filter Buttons: TOTAL, FILTRAR POR ESTILO (Dropdown Multi-Select), POR MODELO */}
-                  <div className="flex items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10 relative">
-                    <button
-                      onClick={() => setStockViewMode("TOTAL")}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                        stockViewMode === "TOTAL"
-                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
-                          : "text-gray-300 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      🌐 TOTAL
-                    </button>
-
-                    {/* FILTRAR POR ESTILO Dropdown Multi-Select */}
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setIsStockStyleDropdownOpen(!isStockStyleDropdownOpen);
-                          if (stockViewMode === "TOTAL") {
-                            setStockViewMode("BY_STYLE");
-                          }
-                        }}
-                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-                          stockViewMode === "BY_STYLE" || selectedStockStyles.length > 0
-                            ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
-                            : "text-gray-300 hover:text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <span>👠 FILTRAR POR ESTILO</span>
-                        {selectedStockStyles.length > 0 ? (
-                          <span className="bg-white text-dfyf-green text-[10px] font-black px-1.5 py-0.5 rounded-full">
-                            {selectedStockStyles.length}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] opacity-75">▼</span>
-                        )}
-                      </button>
-
-                      {/* Multi-Select Dropdown Menu */}
-                      {isStockStyleDropdownOpen && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-40"
-                            onClick={() => setIsStockStyleDropdownOpen(false)}
-                          />
-                          <div className="absolute right-0 md:left-0 mt-2 w-72 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-4 z-50 text-gray-900 dark:text-white space-y-3">
-                            <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-[#055740]">
-                              <span className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">
-                                Seleccionar Estilos
-                              </span>
-                              {selectedStockStyles.length > 0 && (
-                                <button
-                                  onClick={() => setSelectedStockStyles([])}
-                                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-                                >
-                                  Ver Todos
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
-                              <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-xs font-bold">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedStockStyles.length === 0}
-                                  onChange={() => setSelectedStockStyles([])}
-                                  className="w-4 h-4 accent-dfyf-green rounded cursor-pointer"
-                                />
-                                <span className="flex-1">🌐 Todos los Estilos</span>
-                              </label>
-
-                              {byStyle.map((sItem: any) => {
-                                const isChecked = selectedStockStyles.includes(sItem.style);
-                                return (
-                                  <label 
-                                    key={sItem.style} 
-                                    className="flex items-center justify-between p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-xs font-bold"
-                                  >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={() => {
-                                          if (isChecked) {
-                                            setSelectedStockStyles(selectedStockStyles.filter(s => s !== sItem.style));
-                                          } else {
-                                            setSelectedStockStyles([...selectedStockStyles, sItem.style]);
-                                          }
-                                        }}
-                                        className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
-                                      />
-                                      <span className="truncate">{sItem.style}</span>
-                                    </div>
-                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full shrink-0">
-                                      {sItem.total} p.
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-
-                            <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-between items-center">
-                              <span className="text-[11px] font-semibold text-gray-400">
-                                {selectedStockStyles.length === 0 ? "Todos los estilos mostrados" : `${selectedStockStyles.length} de ${byStyle.length} activos`}
-                              </span>
-                              <button
-                                onClick={() => setIsStockStyleDropdownOpen(false)}
-                                className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
-                              >
-                                Aplicar
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                  {/* 2 Summary KPI Cards: Stock Total en Bodega & Modelos Únicos */}
+                  <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+                    <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
+                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Stock Total en Bodega</span>
+                      <span className="text-xl font-black text-white">{summary.totalStock.toLocaleString("es-CL")} <span className="text-xs font-bold text-gray-300">un.</span></span>
                     </div>
-
-                    <button
-                      onClick={() => setStockViewMode("BY_MODEL")}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                        stockViewMode === "BY_MODEL"
-                          ? "bg-dfyf-green text-white shadow-lg shadow-dfyf-green/30"
-                          : "text-gray-300 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      👞 POR MODELO
-                    </button>
+                    <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
+                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Modelos Únicos</span>
+                      <span className="text-xl font-black text-white">{summary.totalModels} <span className="text-xs font-bold text-gray-300">modelos</span></span>
+                    </div>
                   </div>
                 </div>
 
-                {/* VIEW MODE 1: TOTAL KPI SUMMARY */}
-                {stockViewMode === "TOTAL" && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
-                        <span className="text-xs font-black text-gray-400 uppercase tracking-wider block mb-1">Stock Total en Bodega</span>
-                        <div className="text-3xl font-black text-gray-900 dark:text-white">
-                          {summary.totalStock.toLocaleString("es-CL")} <span className="text-sm font-bold text-gray-500">unidades</span>
-                        </div>
-                      </div>
+                {/* UNIFIED MATRIX BY MODEL TABLE */}
+                {(() => {
+                  const rawItems = byModel;
 
-                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
-                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mb-1">Stock Calzado (Pares)</span>
-                        <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                          {summary.shoeStock.toLocaleString("es-CL")} <span className="text-sm font-bold text-emerald-600/70">pares</span>
-                        </div>
-                      </div>
+                  // Dynamic Filter Options derived from actual dataset
+                  const uniqueStyles: string[] = Array.from(new Set<string>(rawItems.map((item: any) => (item.style || "Calzado General") as string)))
+                    .sort();
+                  const uniqueDiscounts: number[] = Array.from(new Set<number>(rawItems.map((item: any) => (item.discount || 0) as number)))
+                    .sort((a, b) => a - b);
+                  const uniqueStockQtys: number[] = Array.from(new Set<number>(rawItems.map((item: any) => (item.total || 0) as number)))
+                    .sort((a, b) => a - b);
 
-                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
-                        <span className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1">Modelos Únicos</span>
-                        <div className="text-3xl font-black text-gray-900 dark:text-white">{summary.totalModels} <span className="text-sm font-bold text-gray-500">modelos</span></div>
-                      </div>
+                  const filteredItems = rawItems.filter((item: any) => {
+                    // Style Filter
+                    const itemStyle = item.style || item.family || "";
+                    if (selectedStockStyles.length > 0 && !selectedStockStyles.includes(itemStyle)) {
+                      return false;
+                    }
 
-                      <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm">
-                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">Estilos de Calzado</span>
-                        <div className="text-3xl font-black text-gray-900 dark:text-white">{summary.totalStyles} <span className="text-sm font-bold text-gray-500">estilos</span></div>
-                      </div>
-                    </div>
+                    // Multi-select Discount Filter
+                    if (selectedStockDiscounts.length > 0) {
+                      const itemDisc = item.discount || 0;
+                      if (!selectedStockDiscounts.includes(itemDisc)) {
+                        return false;
+                      }
+                    }
 
-                    {/* Stock Overview Table */}
-                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-4">
-                      <h3 className="text-lg font-black text-gray-900 dark:text-white">Resumen General de Existencias</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-[#055740] space-y-2">
-                          <div className="flex justify-between items-center text-xs font-bold text-gray-500">
-                            <span>Categoría de Producto</span>
-                            <span>Existencias</span>
-                          </div>
-                          <div className="flex justify-between items-center text-sm font-black text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2">
-                            <span>👟 Calzado de Mujer (Zapatos / Botas / Sandalias)</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">{summary.shoeStock.toLocaleString("es-CL")} pares</span>
-                          </div>
-                          <div className="flex justify-between items-center text-sm font-black text-gray-900 dark:text-white pt-1">
-                            <span>🧦 Accesorios (Plantillas y Calcetines)</span>
-                            <span className="text-amber-600 dark:text-amber-400">{summary.accStock.toLocaleString("es-CL")} un</span>
-                          </div>
-                        </div>
+                    // Multi-select Stock Filter
+                    if (selectedStockQtys.length > 0) {
+                      const itemQty = item.total || 0;
+                      if (!selectedStockQtys.includes(itemQty)) {
+                        return false;
+                      }
+                    }
 
-                        <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-[#055740] flex flex-col justify-center">
-                          <span className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Acción Rápida</span>
-                          <p className="text-xs text-gray-500 font-medium mb-3">
-                            Selecciona los filtros **POR ESTILO** o **POR MODELO** en la parte superior para consultar y ordenar la matriz de curva de tallas detallada.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    return true;
+                  });
 
-                {/* VIEW MODE 2 & 3: BY_STYLE or BY_MODEL MATRIX TABLE */}
-                {(stockViewMode === "BY_STYLE" || stockViewMode === "BY_MODEL") && (() => {
-                  const rawItems = stockViewMode === "BY_STYLE" ? byStyle : byModel;
-                  const filteredItems = selectedStockStyles.length === 0
-                    ? rawItems
-                    : rawItems.filter((item: any) => {
-                        const itemStyle = item.style || item.family || "";
-                        return selectedStockStyles.includes(itemStyle);
-                      });
                   const sortedItems = getSortedData(filteredItems);
 
                   return (
-                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-6">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                        <div>
-                          <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                            Matriz de Stock en Bodega {stockViewMode === "BY_STYLE" ? "Desagrupado por Estilo" : "Desagrupado por Modelo"}
-                          </h3>
-                          <p className="text-xs text-gray-500 font-medium">
-                            Haz clic en los encabezados de las columnas (Tallas 35-42, Total, {stockViewMode === "BY_STYLE" ? "Estilo" : "Modelo"}) para ordenar de forma ascendente o descendente.
-                          </p>
-                        </div>
-                        <div className="text-xs font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200/50">
-                          ↕️ Clic en encabezado para ordenar ↑ / ↓
-                        </div>
-                      </div>
-
-                      {/* Active Style Filter Badges */}
-                      {selectedStockStyles.length > 0 && (
+                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-4">
+                      {/* Active Filter Badges */}
+                      {(selectedStockStyles.length > 0 || selectedStockDiscounts.length > 0 || selectedStockQtys.length > 0) && (
                         <div className="flex items-center gap-2 flex-wrap bg-emerald-50/70 dark:bg-emerald-950/40 p-3 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/60">
                           <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">
-                            🎨 Filtrando Estilos ({selectedStockStyles.length}):
+                            🔍 Filtros Activos:
                           </span>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {selectedStockStyles.map((style) => (
@@ -4388,7 +4799,7 @@ export default function AppContainer() {
                                 key={style}
                                 className="inline-flex items-center gap-1 bg-white dark:bg-[#033b2b] text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm"
                               >
-                                {style}
+                                Estilo: {style}
                                 <button
                                   onClick={() => setSelectedStockStyles(selectedStockStyles.filter(s => s !== style))}
                                   className="hover:text-red-500 font-black cursor-pointer ml-0.5"
@@ -4397,47 +4808,376 @@ export default function AppContainer() {
                                 </button>
                               </span>
                             ))}
+
+                            {selectedStockDiscounts.map((d) => (
+                              <span 
+                                key={`disc_${d}`}
+                                className="inline-flex items-center gap-1 bg-white dark:bg-[#033b2b] text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm"
+                              >
+                                Dcto: {d === 0 ? "Sin Descuento" : `${d}%`}
+                                <button
+                                  onClick={() => setSelectedStockDiscounts(selectedStockDiscounts.filter(val => val !== d))}
+                                  className="hover:text-red-500 font-black cursor-pointer ml-0.5"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+
+                            {selectedStockQtys.map((q) => (
+                              <span 
+                                key={`qty_${q}`}
+                                className="inline-flex items-center gap-1 bg-white dark:bg-[#033b2b] text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm"
+                              >
+                                Stock: {q === 0 ? "0 pares" : `${q} ${q === 1 ? "par" : "pares"}`}
+                                <button
+                                  onClick={() => setSelectedStockQtys(selectedStockQtys.filter(val => val !== q))}
+                                  className="hover:text-red-500 font-black cursor-pointer ml-0.5"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+
                             <button
-                              onClick={() => setSelectedStockStyles([])}
+                              onClick={() => {
+                                setSelectedStockStyles([]);
+                                setSelectedStockDiscounts([]);
+                                setSelectedStockQtys([]);
+                              }}
                               className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer ml-1"
                             >
-                              Limpiar Filtros
+                              Limpiar Todos
                             </button>
                           </div>
                         </div>
                       )}
 
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full text-xs">
                           <thead>
                             <tr className="bg-gray-50 dark:bg-white/5 text-gray-500 font-black uppercase tracking-wider border-b border-gray-200 dark:border-[#055740]">
+                              {/* 1. ESTILO (With Inline Multi-Select Filter Dropdown) */}
+                              <th className="p-3.5 text-left relative select-none rounded-l-2xl">
+                                <div className="flex items-center justify-start gap-1">
+                                  <span 
+                                    onClick={() => handleSort("style")} 
+                                    className="cursor-pointer hover:text-dfyf-green transition-colors"
+                                  >
+                                    Estilo
+                                    {stockSortColumn === "style" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                  </span>
+                                  <button
+                                    onClick={(e) => openStockDropdown("style", e)}
+                                    className={`p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer ${
+                                      selectedStockStyles.length > 0 ? "text-dfyf-green font-black bg-emerald-100 dark:bg-emerald-950 border border-emerald-400" : "text-gray-400"
+                                    }`}
+                                    title="Filtrar por Estilo"
+                                  >
+                                    ⚙️
+                                  </button>
+                                </div>
+
+                                {isStockStyleDropdownOpen && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsStockStyleDropdownOpen(false)} />
+                                    <div 
+                                      className="fixed w-64 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-3 z-50 text-xs text-left text-gray-900 dark:text-white space-y-2"
+                                      style={{ top: `${stockDropdownPos.top}px`, left: `${stockDropdownPos.left}px` }}
+                                    >
+                                      <div className="flex justify-between items-center pb-1.5 border-b border-gray-100 dark:border-[#055740]">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-gray-400">
+                                          Filtrar Estilos ({selectedStockStyles.length === 0 ? "Todos" : selectedStockStyles.length})
+                                        </span>
+                                        {selectedStockStyles.length > 0 && (
+                                          <button
+                                            onClick={() => setSelectedStockStyles([])}
+                                            className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                          >
+                                            Ver Todos
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                                        <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedStockStyles.length === 0}
+                                            onChange={() => setSelectedStockStyles([])}
+                                            className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                          />
+                                          <span>🌐 Todos los Estilos</span>
+                                        </label>
+
+                                        {uniqueStyles.map((st) => {
+                                          const isChecked = selectedStockStyles.includes(st);
+                                          return (
+                                            <label 
+                                              key={st} 
+                                              className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedStockStyles.length > 0 && isChecked}
+                                                onChange={() => {
+                                                  if (selectedStockStyles.length === 0) {
+                                                    setSelectedStockStyles([st]);
+                                                  } else if (isChecked) {
+                                                    setSelectedStockStyles(selectedStockStyles.filter(val => val !== st));
+                                                  } else {
+                                                    setSelectedStockStyles([...selectedStockStyles, st]);
+                                                  }
+                                                }}
+                                                className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                              />
+                                              <span>👠 {st}</span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-end">
+                                        <button
+                                          onClick={() => setIsStockStyleDropdownOpen(false)}
+                                          className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
+                                        >
+                                          Listo
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </th>
+
+                              {/* 2. MODELO */}
                               <th 
-                                onClick={() => handleSort("name")}
-                                className="p-3.5 pl-4 rounded-l-2xl cursor-pointer hover:text-dfyf-green transition-colors"
+                                onClick={() => handleSort("model")}
+                                className="p-3.5 text-left cursor-pointer hover:text-dfyf-green transition-colors"
                               >
-                                <div className="flex items-center gap-1">
-                                  {stockViewMode === "BY_STYLE" ? "Estilo" : "Modelo"}
-                                  {stockSortColumn === "name" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                <div className="flex items-center justify-start gap-1">
+                                  Modelo
+                                  {(stockSortColumn === "model" || stockSortColumn === "name") && (stockSortDir === "asc" ? " ↑" : " ↓")}
                                 </div>
                               </th>
 
+                              {/* 3. PRECIO */}
                               <th 
-                                onClick={() => handleSort("total")}
+                                onClick={() => handleSort("originalPrice")}
                                 className="p-3.5 text-right cursor-pointer hover:text-dfyf-green transition-colors"
                               >
                                 <div className="flex items-center justify-end gap-1">
-                                  TOTAL PARES
-                                  {stockSortColumn === "total" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                  Precio
+                                  {stockSortColumn === "originalPrice" && (stockSortDir === "asc" ? " ↑" : " ↓")}
                                 </div>
                               </th>
 
+                              {/* 4. P. ACTUAL */}
+                              <th 
+                                onClick={() => handleSort("currentPrice")}
+                                className="p-3.5 text-right cursor-pointer hover:text-dfyf-green transition-colors"
+                              >
+                                <div className="flex items-center justify-end gap-1">
+                                  P. Actual
+                                  {stockSortColumn === "currentPrice" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                </div>
+                              </th>
+
+                              {/* 5. DCTO % (With Inline Multi-Select Filter Dropdown) */}
+                              <th className="p-3.5 text-center relative select-none">
+                                <div className="flex items-center justify-center gap-1">
+                                  <span 
+                                    onClick={() => handleSort("discount")} 
+                                    className="cursor-pointer hover:text-dfyf-green transition-colors"
+                                  >
+                                    Dcto %
+                                    {stockSortColumn === "discount" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                  </span>
+                                  <button
+                                    onClick={(e) => openStockDropdown("discount", e)}
+                                    className={`p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer ${
+                                      selectedStockDiscounts.length > 0 ? "text-dfyf-green font-black bg-emerald-100 dark:bg-emerald-950 border border-emerald-400" : "text-gray-400"
+                                    }`}
+                                    title="Filtrar por Descuento"
+                                  >
+                                    ⚙️
+                                  </button>
+                                </div>
+
+                                {isStockDiscountDropdownOpen && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsStockDiscountDropdownOpen(false)} />
+                                    <div 
+                                      className="fixed w-64 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-3 z-50 text-xs text-left text-gray-900 dark:text-white space-y-2"
+                                      style={{ top: `${stockDropdownPos.top}px`, left: `${stockDropdownPos.left}px` }}
+                                    >
+                                      <div className="flex justify-between items-center pb-1.5 border-b border-gray-100 dark:border-[#055740]">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-gray-400">
+                                          Filtrar Descuentos ({selectedStockDiscounts.length === 0 ? "Todos" : selectedStockDiscounts.length})
+                                        </span>
+                                        {selectedStockDiscounts.length > 0 && (
+                                          <button
+                                            onClick={() => setSelectedStockDiscounts([])}
+                                            className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                          >
+                                            Ver Todos
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                                        <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedStockDiscounts.length === 0}
+                                            onChange={() => setSelectedStockDiscounts([])}
+                                            className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                          />
+                                          <span>🌐 Todos los Descuentos</span>
+                                        </label>
+
+                                        {uniqueDiscounts.map((d) => {
+                                          const isChecked = selectedStockDiscounts.includes(d);
+                                          return (
+                                            <label 
+                                              key={d} 
+                                              className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedStockDiscounts.length > 0 && isChecked}
+                                                onChange={() => {
+                                                  if (selectedStockDiscounts.length === 0) {
+                                                    setSelectedStockDiscounts([d]);
+                                                  } else if (isChecked) {
+                                                    setSelectedStockDiscounts(selectedStockDiscounts.filter(val => val !== d));
+                                                  } else {
+                                                    setSelectedStockDiscounts([...selectedStockDiscounts, d]);
+                                                  }
+                                                }}
+                                                className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                              />
+                                              <span>{d === 0 ? "🏷️ Sin Descuento (0%)" : `🏷️ ${d}% de Descuento`}</span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-end">
+                                        <button
+                                          onClick={() => setIsStockDiscountDropdownOpen(false)}
+                                          className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
+                                        >
+                                          Listo
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </th>
+
+                              {/* 6. STOCK (With Inline Multi-Select Filter Dropdown) */}
+                              <th className="p-3.5 text-center relative select-none">
+                                <div className="flex items-center justify-center gap-1">
+                                  <span 
+                                    onClick={() => handleSort("total")} 
+                                    className="cursor-pointer hover:text-dfyf-green transition-colors"
+                                  >
+                                    Stock
+                                    {stockSortColumn === "total" && (stockSortDir === "asc" ? " ↑" : " ↓")}
+                                  </span>
+                                  <button
+                                    onClick={(e) => openStockDropdown("qty", e)}
+                                    className={`p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer ${
+                                      selectedStockQtys.length > 0 ? "text-dfyf-green font-black bg-emerald-100 dark:bg-emerald-950 border border-emerald-400" : "text-gray-400"
+                                    }`}
+                                    title="Filtrar por Stock"
+                                  >
+                                    ⚙️
+                                  </button>
+                                </div>
+
+                                {isStockQtyDropdownOpen && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsStockQtyDropdownOpen(false)} />
+                                    <div 
+                                      className="fixed w-60 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl shadow-2xl p-3 z-50 text-xs text-left text-gray-900 dark:text-white space-y-2"
+                                      style={{ top: `${stockDropdownPos.top}px`, left: `${stockDropdownPos.left}px` }}
+                                    >
+                                      <div className="flex justify-between items-center pb-1.5 border-b border-gray-100 dark:border-[#055740]">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-gray-400">
+                                          Filtrar Stock ({selectedStockQtys.length === 0 ? "Todos" : selectedStockQtys.length})
+                                        </span>
+                                        {selectedStockQtys.length > 0 && (
+                                          <button
+                                            onClick={() => setSelectedStockQtys([])}
+                                            className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                          >
+                                            Ver Todos
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                                        <label className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedStockQtys.length === 0}
+                                            onChange={() => setSelectedStockQtys([])}
+                                            className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                          />
+                                          <span>🌐 Todos los Stocks</span>
+                                        </label>
+
+                                        {uniqueStockQtys.map((q) => {
+                                          const isChecked = selectedStockQtys.includes(q);
+                                          const labelText = q === 0 ? "🚫 0 pares (Sin Stock)" : `📦 ${q} ${q === 1 ? "par" : "pares"}`;
+                                          return (
+                                            <label 
+                                              key={q} 
+                                              className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer font-bold"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedStockQtys.length > 0 && isChecked}
+                                                onChange={() => {
+                                                  if (selectedStockQtys.length === 0) {
+                                                    setSelectedStockQtys([q]);
+                                                  } else if (isChecked) {
+                                                    setSelectedStockQtys(selectedStockQtys.filter(val => val !== q));
+                                                  } else {
+                                                    setSelectedStockQtys([...selectedStockQtys, q]);
+                                                  }
+                                                }}
+                                                className="w-4 h-4 accent-dfyf-green rounded cursor-pointer shrink-0"
+                                              />
+                                              <span>{labelText}</span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="pt-2 border-t border-gray-100 dark:border-[#055740] flex justify-end">
+                                        <button
+                                          onClick={() => setIsStockQtyDropdownOpen(false)}
+                                          className="px-3 py-1 bg-dfyf-green text-white text-xs font-black rounded-lg cursor-pointer hover:bg-dfyf-green/90"
+                                        >
+                                          Listo
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </th>
+
+                              {/* 7. TALLAS: 35, 36, ..., 42 */}
                               {allSizes.map(sz => (
                                 <th 
                                   key={sz} 
                                   onClick={() => handleSort(sz)}
                                   className="p-3.5 text-center font-black bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-pointer hover:bg-emerald-500/20 transition-colors"
                                 >
-                                  Talla {sz}
+                                  {sz}
                                   {stockSortColumn === sz && (stockSortDir === "asc" ? " ↑" : " ↓")}
                                 </th>
                               ))}
@@ -4445,19 +5185,49 @@ export default function AppContainer() {
                           </thead>
                           <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
                             {sortedItems.map((row: any, idx: number) => {
+                              const hasDiscount = (row.discount || 0) > 0;
                               return (
                                 <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors align-middle">
-                                  <td className="p-3.5 pl-4 font-black text-gray-900 dark:text-white align-middle">
+                                  {/* ESTILO */}
+                                  <td className="p-3.5 text-left font-bold text-gray-700 dark:text-gray-200 align-middle">
+                                    {row.style}
+                                  </td>
+
+                                  {/* MODELO */}
+                                  <td className="p-3.5 text-left font-black text-gray-900 dark:text-white align-middle">
                                     <div className="flex items-center gap-2">
                                       <span className="w-2.5 h-2.5 rounded-full bg-dfyf-green inline-block shrink-0"></span>
-                                      <span>{stockViewMode === "BY_STYLE" ? row.style : row.model}</span>
+                                      <span>{row.model}</span>
                                     </div>
                                   </td>
 
-                                  <td className="p-3.5 text-right font-black text-emerald-600 dark:text-emerald-400 align-middle text-sm">
+                                  {/* PRECIO */}
+                                  <td className={`p-3.5 text-right align-middle text-xs ${
+                                    hasDiscount ? "font-semibold text-gray-400 dark:text-gray-400 line-through" : "font-bold text-gray-700 dark:text-gray-200"
+                                  }`}>
+                                    ${(row.originalPrice || row.price || 0).toLocaleString("es-CL")}
+                                  </td>
+
+                                  {/* P. ACTUAL */}
+                                  <td className="p-3.5 text-right font-black text-gray-900 dark:text-white align-middle text-xs">
+                                    ${(row.currentPrice || row.price || 0).toLocaleString("es-CL")}
+                                  </td>
+
+                                  {/* DCTO % */}
+                                  <td className="p-3.5 text-center align-middle">
+                                    {hasDiscount ? (
+                                      <span className="inline-block bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-black text-[11px] px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-700 shadow-sm">
+                                        {row.discount}%
+                                      </span>
+                                    ) : null}
+                                  </td>
+
+                                  {/* STOCK */}
+                                  <td className="p-3.5 text-center font-black text-emerald-600 dark:text-emerald-400 align-middle text-sm">
                                     {row.total.toLocaleString("es-CL")}
                                   </td>
 
+                                  {/* TALLAS */}
                                   {allSizes.map(sz => {
                                     const qty = row.sizes[sz] || 0;
                                     return (

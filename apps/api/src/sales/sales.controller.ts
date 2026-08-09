@@ -108,6 +108,15 @@ export class SalesController {
     return this.salesService.updateCustomer(id, body);
   }
 
+  @Delete('customers/:id')
+  async deleteCustomer(
+    @Headers('x-user-id') userId: string,
+    @Param('id') id: string,
+  ) {
+    this.checkAuth(userId);
+    return this.salesService.deleteCustomer(id);
+  }
+
   @Get('reports/sales')
   async getSalesReport(
     @Headers('x-user-id') userId: string,

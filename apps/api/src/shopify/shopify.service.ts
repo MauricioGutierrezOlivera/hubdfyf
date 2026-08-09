@@ -200,6 +200,47 @@ export class ShopifyService implements OnModuleInit {
   // ─── CUSTOMERS ──────────────────────────────────────────────
 
   /**
+   * Create a new customer in Shopify.
+   */
+  async createCustomer(data: { name: string; email?: string; phone?: string; rut?: string }): Promise<any> {
+    const nameParts = data.name.trim().split(' ');
+    const firstName = nameParts[0] || data.name;
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    let phone: string | undefined = undefined;
+    if (data.phone) {
+      const cleanDigits = data.phone.replace(/[^0-9]/g, '');
+      if (cleanDigits.length === 9) {
+        phone = `+56${cleanDigits}`;
+      } else if (cleanDigits.startsWith('569') && cleanDigits.length === 11) {
+        phone = `+${cleanDigits}`;
+      } else {
+        phone = data.phone;
+      }
+    }
+
+    try {
+      const res = await this.shopifyFetch<any>('customers.json', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer: {
+            first_name: firstName,
+            last_name: lastName,
+            email: data.email || undefined,
+            phone: phone || undefined,
+            note: data.rut ? `RUT: ${data.rut}` : undefined,
+            tags: 'POS',
+          },
+        }),
+      });
+      return res?.customer || null;
+    } catch (err) {
+      this.logger.error(`Error creating customer in Shopify: ${err}`);
+      return null;
+    }
+  }
+
+  /**
    * Search customers by query (e.g., email, name).
    */
   async searchCustomers(query: string): Promise<any> {
