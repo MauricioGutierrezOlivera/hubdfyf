@@ -301,6 +301,150 @@ export class ShopifyService implements OnModuleInit {
   }
 
   /**
+   * Bulk adjust prices for a list of model names by discount percentage (0 = remove discount).
+   */
+  async bulkAdjustModelPrices(
+    modelNames: string[],
+    discountPercentage: number,
+  ): Promise<{ success: boolean; updatedVariantsCount: number; updatedModelsCount: number; errors?: string[] }> {
+    try {
+      this.logger.log(
+        `[Shopify Price Adjustment] Starting bulk price adjustment for ${modelNames.length} models with ${discountPercentage}% discount...`,
+      );
+
+      // 1. Fetch products from Shopify
+      let nextUrl: string | null = 'products.json?limit=250';
+      const allShopifyProducts: any[] = [];
+
+      while (nextUrl) {
+        const data: any = await this.shopifyFetch(nextUrl);
+        const products = data.products || [];
+        allShopifyProducts.push(...products);
+        nextUrl = null; // Shopify REST API limit=250
+      }
+
+      const normModelNames = modelNames.map(m => m.trim().toLowerCase()).filter(Boolean);
+
+      // Match products in Shopify
+      const matchingProducts = allShopifyProducts.filter(p => {
+        const titleLower = p.title.trim().toLowerCase();
+        return normModelNames.some(m => titleLower.includes(m) || m.includes(titleLower));
+      });
+
+      let updatedVariantsCount = 0;
+      let updatedModelsCount = 0;
+      const errors: string[] = [];
+
+      // Loop through matching products and update variants
+      for (const p of matchingProducts) {
+        let modelHasUpdates = false;
+
+        for (const v of p.variants) {
+          const rawCompareAt = parseFloat(v.compare_at_price || v.price || '0');
+          if (rawCompareAt <= 0) continue;
+
+          let newPriceVal: number;
+          let compareAtStr: string;
+
+          if (discountPercentage === 0) {
+            // Remove discount: new price equals compareAtPrice
+            newPriceVal = Math.round(rawCompareAt);
+            compareAtStr = String(Math.round(rawCompareAt));
+          } else {
+            // Apply discount
+            newPriceVal = Math.round(rawCompareAt * (1 - discountPercentage / 100));
+            compareAtStr = String(Math.round(rawCompareAt));
+          }
+
+          const priceStr = String(newPriceVal);
+
+          try {
+            // Send PUT to Shopify REST Admin API
+            await this.shopifyFetch(`variants/${v.id}.json`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                variant: {
+                  id: v.id,
+                  price: priceStr,
+                  compare_at_price: compareAtStr,
+                },
+              }),
+            });
+
+            // Also update local PostgreSQL database
+            const shopifyId = String(v.id);
+            await this.prisma.product.updateMany({
+              where: { shopifyId },
+              data: {
+                price: newPriceVal,
+                compareAtPrice: parseFloat(compareAtStr),
+              },
+            });
+
+            updatedVariantsCount++;
+            modelHasUpdates = true;
+          } catch (vErr: any) {
+            this.logger.error(`Error updating variant ${v.id} (${p.title}): ${vErr.message}`);
+            errors.push(`Variant ${v.id} (${p.title}): ${vErr.message}`);
+          }
+        }
+
+        if (modelHasUpdates) {
+          updatedModelsCount++;
+        }
+      }
+
+      // Also handle models in PostgreSQL DB that might not be matched above
+      const dbProducts = await this.prisma.product.findMany({
+        where: {
+          OR: normModelNames.map(m => ({
+            name: { contains: m, mode: 'insensitive' },
+          })),
+        },
+      });
+
+      for (const dbP of dbProducts) {
+        if (!dbP.shopifyId) continue;
+        const compareAt = dbP.compareAtPrice || dbP.price || 0;
+        if (compareAt <= 0) continue;
+
+        let newPriceVal = discountPercentage === 0
+          ? Math.round(compareAt)
+          : Math.round(compareAt * (1 - discountPercentage / 100));
+
+        try {
+          await this.prisma.product.update({
+            where: { id: dbP.id },
+            data: {
+              price: newPriceVal,
+              compareAtPrice: compareAt,
+            },
+          });
+        } catch (e) {}
+      }
+
+      this.logger.log(
+        `[Shopify Price Adjustment] Complete. Updated ${updatedVariantsCount} variants across ${updatedModelsCount} models.`,
+      );
+
+      return {
+        success: true,
+        updatedVariantsCount,
+        updatedModelsCount,
+        errors: errors.length > 0 ? errors : undefined,
+      };
+    } catch (err: any) {
+      this.logger.error(`[Shopify Price Adjustment] Failed: ${err.message}`);
+      return {
+        success: false,
+        updatedVariantsCount: 0,
+        updatedModelsCount: 0,
+        errors: [err.message],
+      };
+    }
+  }
+
+  /**
    * Test connection to Shopify.
    */
   async testConnection(): Promise<{ success: boolean; shop?: any; error?: string }> {

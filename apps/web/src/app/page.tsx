@@ -168,6 +168,15 @@ export default function AppContainer() {
   // Sales Report States
   const [isSellerRevenueModalOpen, setIsSellerRevenueModalOpen] = useState(false);
 
+  // Stock Matrix Search State
+  const [stockModelSearchQuery, setStockModelSearchQuery] = useState("");
+
+  // Bulk Price Adjustment Modal States
+  const [isAdjustPriceModalOpen, setIsAdjustPriceModalOpen] = useState(false);
+  const [selectedDiscountPercent, setSelectedDiscountPercent] = useState<number | "">("");
+  const [isApplyingPriceAdjustment, setIsApplyingPriceAdjustment] = useState(false);
+  const [priceAdjustmentResult, setPriceAdjustmentResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Returns / Exchanges States
   const [exchangeSearchQuery, setExchangeSearchQuery] = useState("");
   const [exchangeCustomer, setExchangeCustomer] = useState<Customer | null>(null);
@@ -4714,6 +4723,13 @@ export default function AppContainer() {
             };
 
             const filteredStockItems = byModel.filter((item: any) => {
+              if (stockModelSearchQuery.trim() !== "") {
+                const query = stockModelSearchQuery.trim().toLowerCase();
+                const modelName = (item.model || item.name || "").toLowerCase();
+                if (!modelName.includes(query)) {
+                  return false;
+                }
+              }
               const itemStyle = item.style || item.family || "";
               if (selectedStockStyles.length > 0 && !selectedStockStyles.includes(itemStyle)) {
                 return false;
@@ -4736,46 +4752,46 @@ export default function AppContainer() {
             const allSizes = ["35", "36", "37", "38", "39", "40", "41", "42"];
 
             return (
-              <div className="h-full overflow-y-auto pr-2 pb-12 space-y-8">
-                {/* Header Title & Summary Metric Cards */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-8 rounded-3xl text-white shadow-xl">
+              <div className="h-full overflow-y-auto pr-2 pb-12 space-y-4">
+                {/* Compact Header Title & Summary Metric Cards */}
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-4 px-6 rounded-2xl text-white shadow-md">
                   <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black rounded-full uppercase tracking-wider">
-                        Inventario Bodega
-                      </span>
-                      <span className="text-xs text-gray-300 font-medium">Exclusivo Admin</span>
-                    </div>
-                    <h1 className="text-2xl md:text-3xl font-black">Análisis de Stock & Curva de Tallas en Bodega</h1>
-                    <p className="text-sm text-gray-300 mt-1 max-w-2xl font-medium">
-                      Visualización completa de existencias disponibles por modelo, estilo y curva de números en almacén.
-                    </p>
+                    <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
+                      <span>📦</span> Stock y Tallas en Bodega
+                    </h1>
                   </div>
 
-                  {/* Summary KPI Cards Box */}
-                  <div className="flex flex-col gap-2.5 items-end shrink-0">
-                    {/* Top Row: Stock Total & Modelos Únicos */}
-                    <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
-                      <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
-                        <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Stock Total en Bodega</span>
-                        <span className="text-xl font-black text-white">{summary.totalStock.toLocaleString("es-CL")} <span className="text-xs font-bold text-gray-300">un.</span></span>
-                      </div>
-                      <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
-                        <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Modelos Únicos</span>
-                        <span className="text-xl font-black text-white">{summary.totalModels} <span className="text-xs font-bold text-gray-300">modelos</span></span>
-                      </div>
+                  {/* Compact Inline KPI Badges & Action Button */}
+                  <div className="flex items-center gap-3 flex-wrap shrink-0">
+                    <div className="bg-black/30 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider">Stock Total:</span>
+                      <span className="text-sm font-black text-white">{summary.totalStock.toLocaleString("es-CL")} <span className="text-[10px] font-bold text-gray-300">un.</span></span>
                     </div>
 
-                    {/* Bottom Row: Modelos Únicos Filtrados en Matriz */}
-                    <div className="w-full bg-emerald-950/70 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-emerald-400/40 text-right shadow-sm flex items-center justify-between gap-4">
-                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Modelos Filtrados en Matriz
-                      </span>
-                      <span className="text-xl font-black text-white">
-                        {filteredStockItems.length} <span className="text-xs font-bold text-emerald-300">modelos</span>
-                      </span>
+                    <div className="bg-black/30 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider">Modelos Únicos:</span>
+                      <span className="text-sm font-black text-white">{summary.totalModels}</span>
                     </div>
+
+                    <div className="bg-emerald-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-emerald-400/40 flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Filtrados:
+                      </span>
+                      <span className="text-sm font-black text-white">{filteredStockItems.length}</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setPriceAdjustmentResult(null);
+                        setSelectedDiscountPercent("");
+                        setIsAdjustPriceModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                      title="Adecuar precios o descuentos para todos los modelos filtrados"
+                    >
+                      <span>🏷️</span> Adecuar Precio
+                    </button>
                   </div>
                 </div>
 
@@ -4792,6 +4808,15 @@ export default function AppContainer() {
                     .sort((a, b) => a - b);
 
                   const filteredItems = rawItems.filter((item: any) => {
+                    // Instant Model Search Filter
+                    if (stockModelSearchQuery.trim() !== "") {
+                      const query = stockModelSearchQuery.trim().toLowerCase();
+                      const modelName = (item.model || item.name || "").toLowerCase();
+                      if (!modelName.includes(query)) {
+                        return false;
+                      }
+                    }
+
                     // Style Filter
                     const itemStyle = item.style || item.family || "";
                     if (selectedStockStyles.length > 0 && !selectedStockStyles.includes(itemStyle)) {
@@ -4820,14 +4845,56 @@ export default function AppContainer() {
                   const sortedItems = getSortedData(filteredItems);
 
                   return (
-                    <div className="bg-white dark:bg-[#033b2b] p-6 rounded-3xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-[#033b2b] p-4 rounded-2xl border border-gray-200 dark:border-[#055740] shadow-sm space-y-3">
+                      {/* Instant Model Search Bar Toolbar */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-gray-50/80 dark:bg-[#022c20]/60 p-3.5 rounded-2xl border border-gray-200/80 dark:border-[#055740]/60 shadow-xs">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs select-none">🔍</span>
+                          <input
+                            type="text"
+                            value={stockModelSearchQuery}
+                            onChange={(e) => setStockModelSearchQuery(e.target.value)}
+                            placeholder="Buscar por nombre de modelo... (ej. Boi, Aneto, Ordesa)"
+                            className="w-full pl-9 pr-9 py-2 text-xs font-bold bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white border border-gray-200 dark:border-[#055740] rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-gray-400 font-medium"
+                          />
+                          {stockModelSearchQuery.trim() !== "" && (
+                            <button
+                              onClick={() => setStockModelSearchQuery("")}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs font-black cursor-pointer p-0.5"
+                              title="Limpiar búsqueda"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                            Mostrando <strong className="text-emerald-600 dark:text-emerald-300 font-black">{filteredItems.length}</strong> de {rawItems.length} modelos
+                          </span>
+                        </div>
+                      </div>
+
                       {/* Active Filter Badges */}
-                      {(selectedStockStyles.length > 0 || selectedStockDiscounts.length > 0 || selectedStockQtys.length > 0) && (
+                      {(selectedStockStyles.length > 0 || selectedStockDiscounts.length > 0 || selectedStockQtys.length > 0 || stockModelSearchQuery.trim() !== "") && (
                         <div className="flex items-center gap-2 flex-wrap bg-emerald-50/70 dark:bg-emerald-950/40 p-3 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/60">
                           <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">
                             🔍 Filtros Activos:
                           </span>
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            {stockModelSearchQuery.trim() !== "" && (
+                              <span 
+                                className="inline-flex items-center gap-1 bg-white dark:bg-[#033b2b] text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm"
+                              >
+                                Modelo: "{stockModelSearchQuery.trim()}"
+                                <button
+                                  onClick={() => setStockModelSearchQuery("")}
+                                  className="hover:text-red-500 font-black cursor-pointer ml-0.5"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            )}
                             {selectedStockStyles.map((style) => (
                               <span 
                                 key={style}
@@ -5283,12 +5350,216 @@ export default function AppContainer() {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* ADECUAR PRECIO DE MODELOS FILTRADOS POPUP MODAL */}
+                      {isAdjustPriceModalOpen && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-7 max-w-2xl w-full shadow-2xl space-y-6">
+                      {/* Modal Header */}
+                      <div className="flex justify-between items-start border-b border-gray-100 dark:border-[#055740] pb-4">
+                        <div>
+                          <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>🏷️</span> Adecuar Precio de Modelos Filtrados
+                          </h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
+                            Modificación masiva de precios base para los <strong className="text-emerald-600 dark:text-emerald-400">{filteredStockItems.length} modelos</strong> actualmente filtrados en la matriz.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setIsAdjustPriceModalOpen(false)}
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-lg font-bold cursor-pointer p-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Main Grid: Left Model List, Right Action Controls */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+                        {/* Left Column (5 cols): Filtered Models List */}
+                        <div className="md:col-span-5 bg-gray-50 dark:bg-[#022c20]/50 border border-gray-200 dark:border-[#055740] rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                          <div className="flex justify-between items-center pb-2 border-b border-gray-200/80 dark:border-[#055740]/60">
+                            <span className="text-xs font-black uppercase text-gray-700 dark:text-gray-300">Modelos Afectados</span>
+                            <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                              {filteredStockItems.length} modelos
+                            </span>
+                          </div>
+
+                          <div className="max-h-56 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+                            {filteredStockItems.length === 0 ? (
+                              <p className="text-xs text-gray-400 text-center py-4 font-bold">No hay modelos en la selección actual.</p>
+                            ) : (
+                              filteredStockItems.map((item: any, idx: number) => (
+                                <div key={idx} className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2 py-1 px-2.5 bg-white dark:bg-[#033b2b] rounded-xl border border-gray-200/60 dark:border-[#055740]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                  <span className="truncate">{item.model}</span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="pt-2 border-t border-gray-200/80 dark:border-[#055740]/60 text-[10px] text-gray-400 font-medium">
+                            * El cambio afectará a todas las tallas de estos modelos en Shopify y BD.
+                          </div>
+                        </div>
+
+                        {/* Right Column (7 cols): Action Controls */}
+                        <div className="md:col-span-7 space-y-4 flex flex-col justify-between">
+                          {/* Action 1: Eliminar Descuento */}
+                          <div className="bg-gray-50 dark:bg-[#022c20]/30 border border-gray-200/80 dark:border-[#055740]/50 rounded-2xl p-4 space-y-2.5">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">Acción A: Eliminar Descuento</span>
+                              <span className="text-[10px] font-bold text-gray-400">0% Dcto</span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                              Igualar el Precio Base al Precio Comparación en todas las variantes de los modelos filtrados (dejar sin descuento).
+                            </p>
+                            <button
+                              disabled={isApplyingPriceAdjustment || filteredStockItems.length === 0}
+                              onClick={async () => {
+                                setIsApplyingPriceAdjustment(true);
+                                setPriceAdjustmentResult(null);
+                                try {
+                                  const res = await fetch(`${API_BASE_URL}/shopify/bulk-adjust-prices`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || 'admin' },
+                                    body: JSON.stringify({
+                                      modelNames: filteredStockItems.map((i: any) => i.model),
+                                      discountPercentage: 0,
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    setPriceAdjustmentResult({
+                                      success: true,
+                                      message: `¡Se eliminó el descuento exitosamente! (${data.updatedVariantsCount} variantes de ${data.updatedModelsCount} modelos actualizadas en Shopify y BD).`,
+                                    });
+                                    fetchStockReport();
+                                  } else {
+                                    setPriceAdjustmentResult({
+                                      success: false,
+                                      message: data.errors?.[0] || 'Error al eliminar descuento.',
+                                    });
+                                  }
+                                } catch (err: any) {
+                                  setPriceAdjustmentResult({ success: false, message: err.message || 'Error de conexión.' });
+                                } finally {
+                                  setIsApplyingPriceAdjustment(false);
+                                }
+                              }}
+                              className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                              <span>🏷️</span> Eliminar Descuento (0%)
+                            </button>
+                          </div>
+
+                          {/* Action 2: Asignar Descuento */}
+                          <div className="bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/60 rounded-2xl p-4 space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">Acción B: Asignar Descuento %</span>
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">10% a 50%</span>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 block">Selecciona el Porcentaje:</label>
+                              <select
+                                value={selectedDiscountPercent}
+                                onChange={(e) => setSelectedDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
+                                className="w-full border border-gray-300 dark:border-[#055740] rounded-xl px-3 py-2 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-9 cursor-pointer"
+                              >
+                                <option value="">Seleccionar descuento...</option>
+                                <option value="10">10% de descuento</option>
+                                <option value="15">15% de descuento</option>
+                                <option value="20">20% de descuento</option>
+                                <option value="25">25% de descuento</option>
+                                <option value="30">30% de descuento</option>
+                                <option value="35">35% de descuento</option>
+                                <option value="40">40% de descuento</option>
+                                <option value="45">45% de descuento</option>
+                                <option value="50">50% de descuento</option>
+                              </select>
+                            </div>
+
+                            <button
+                              disabled={selectedDiscountPercent === "" || isApplyingPriceAdjustment || filteredStockItems.length === 0}
+                              onClick={async () => {
+                                if (selectedDiscountPercent === "") return;
+                                setIsApplyingPriceAdjustment(true);
+                                setPriceAdjustmentResult(null);
+                                try {
+                                  const res = await fetch(`${API_BASE_URL}/shopify/bulk-adjust-prices`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || 'admin' },
+                                    body: JSON.stringify({
+                                      modelNames: filteredStockItems.map((i: any) => i.model),
+                                      discountPercentage: Number(selectedDiscountPercent),
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    setPriceAdjustmentResult({
+                                      success: true,
+                                      message: `¡Se asignó el ${selectedDiscountPercent}% de descuento exitosamente! (${data.updatedVariantsCount} variantes de ${data.updatedModelsCount} modelos actualizadas en Shopify y BD).`,
+                                    });
+                                    fetchStockReport();
+                                  } else {
+                                    setPriceAdjustmentResult({
+                                      success: false,
+                                      message: data.errors?.[0] || 'Error al aplicar descuento.',
+                                    });
+                                  }
+                                } catch (err: any) {
+                                  setPriceAdjustmentResult({ success: false, message: err.message || 'Error de conexión.' });
+                                } finally {
+                                  setIsApplyingPriceAdjustment(false);
+                                }
+                              }}
+                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 flex items-center justify-center gap-2"
+                            >
+                              <span>%</span> Asignar Descuento
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Loading State or Feedback Alert */}
+                      {isApplyingPriceAdjustment && (
+                        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-2xl flex items-center gap-3">
+                          <span className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin shrink-0"></span>
+                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                            Actualizando precios en Shopify y Base de Datos local... por favor espere.
+                          </span>
+                        </div>
+                      )}
+
+                      {priceAdjustmentResult && (
+                        <div className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2 ${
+                          priceAdjustmentResult.success 
+                            ? "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800 text-green-900 dark:text-green-200" 
+                            : "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200"
+                        }`}>
+                          <span>{priceAdjustmentResult.success ? "✅" : "⚠️"}</span>
+                          <span>{priceAdjustmentResult.message}</span>
+                        </div>
+                      )}
+
+                      {/* Modal Actions */}
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => setIsAdjustPriceModalOpen(false)}
+                          className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-[#044c38] dark:hover:bg-[#055740] text-gray-800 dark:text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                        >
+                          Cerrar
+                        </button>
+                      </div>
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
               </div>
             );
           })()}
+        </div>
+      );
+    })()}
 
           {/* TAB 5: ADMIN PANEL */}
           {activeTab === "admin" && (

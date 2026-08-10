@@ -54,4 +54,19 @@ export class ShopifyController {
   async syncCatalog() {
     return this.shopifyService.syncCatalogFromShopify();
   }
+
+  /**
+   * POST /shopify/bulk-adjust-prices
+   * Bulk adjust prices for a list of model names by discount percentage (0 = remove discount).
+   */
+  @Post('bulk-adjust-prices')
+  async bulkAdjustPrices(
+    @Body() body: { modelNames: string[]; discountPercentage: number },
+  ) {
+    const { modelNames, discountPercentage } = body;
+    return this.shopifyService.bulkAdjustModelPrices(
+      modelNames || [],
+      discountPercentage ?? 0,
+    );
+  }
 }
