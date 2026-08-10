@@ -4713,11 +4713,31 @@ export default function AppContainer() {
               });
             };
 
+            const filteredStockItems = byModel.filter((item: any) => {
+              const itemStyle = item.style || item.family || "";
+              if (selectedStockStyles.length > 0 && !selectedStockStyles.includes(itemStyle)) {
+                return false;
+              }
+              if (selectedStockDiscounts.length > 0) {
+                const itemDisc = item.discount || 0;
+                if (!selectedStockDiscounts.includes(itemDisc)) {
+                  return false;
+                }
+              }
+              if (selectedStockQtys.length > 0) {
+                const itemQty = item.total || 0;
+                if (!selectedStockQtys.includes(itemQty)) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
             const allSizes = ["35", "36", "37", "38", "39", "40", "41", "42"];
 
             return (
               <div className="h-full overflow-y-auto pr-2 pb-12 space-y-8">
-                {/* Header Title & 2 Summary Metric Cards */}
+                {/* Header Title & Summary Metric Cards */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#033b2b] to-[#044c38] p-8 rounded-3xl text-white shadow-xl">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -4732,15 +4752,29 @@ export default function AppContainer() {
                     </p>
                   </div>
 
-                  {/* 2 Summary KPI Cards: Stock Total en Bodega & Modelos Únicos */}
-                  <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
-                    <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
-                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Stock Total en Bodega</span>
-                      <span className="text-xl font-black text-white">{summary.totalStock.toLocaleString("es-CL")} <span className="text-xs font-bold text-gray-300">un.</span></span>
+                  {/* Summary KPI Cards Box */}
+                  <div className="flex flex-col gap-2.5 items-end shrink-0">
+                    {/* Top Row: Stock Total & Modelos Únicos */}
+                    <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+                      <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
+                        <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Stock Total en Bodega</span>
+                        <span className="text-xl font-black text-white">{summary.totalStock.toLocaleString("es-CL")} <span className="text-xs font-bold text-gray-300">un.</span></span>
+                      </div>
+                      <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
+                        <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Modelos Únicos</span>
+                        <span className="text-xl font-black text-white">{summary.totalModels} <span className="text-xs font-bold text-gray-300">modelos</span></span>
+                      </div>
                     </div>
-                    <div className="bg-black/30 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-right shrink-0">
-                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider block mb-0.5">Modelos Únicos</span>
-                      <span className="text-xl font-black text-white">{summary.totalModels} <span className="text-xs font-bold text-gray-300">modelos</span></span>
+
+                    {/* Bottom Row: Modelos Únicos Filtrados en Matriz */}
+                    <div className="w-full bg-emerald-950/70 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-emerald-400/40 text-right shadow-sm flex items-center justify-between gap-4">
+                      <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Modelos Filtrados en Matriz
+                      </span>
+                      <span className="text-xl font-black text-white">
+                        {filteredStockItems.length} <span className="text-xs font-bold text-emerald-300">modelos</span>
+                      </span>
                     </div>
                   </div>
                 </div>
