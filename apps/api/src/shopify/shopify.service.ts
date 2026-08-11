@@ -361,14 +361,16 @@ export class ShopifyService implements OnModuleInit {
    * Bulk adjust prices for a list of model names by discount percentage (0 = remove discount).
    * STRICT ORDER OF OPERATIONS: Applies to Shopify REST API FIRST.
    * Only updates PostgreSQL database if Shopify PUT request succeeds.
+   * Optionally appends a new tag to each product on Shopify without removing existing tags.
    */
   async bulkAdjustModelPrices(
     modelNames: string[],
     discountPercentage: number,
+    tag?: string,
   ): Promise<{ success: boolean; updatedVariantsCount: number; updatedModelsCount: number; errors?: string[] }> {
     try {
       this.logger.log(
-        `[Shopify Price Adjustment] Starting bulk price adjustment for ${modelNames.length} models with ${discountPercentage}% discount...`,
+        `[Shopify Price Adjustment] Starting bulk price adjustment for ${modelNames.length} models with ${discountPercentage}% discount (tag: ${tag || 'none'})...`,
       );
 
       // 1. Fetch ALL products from Shopify (with multi-page pagination)
@@ -406,6 +408,36 @@ export class ShopifyService implements OnModuleInit {
       // Loop through matching products and update variants FIRST on Shopify, then in DB
       for (const p of matchingProducts) {
         let modelHasUpdates = false;
+
+        // Optional Tag Application on Shopify Product Level (Preserves existing tags)
+        if (tag && tag.trim() !== '') {
+          const cleanTag = tag.trim();
+          const existingTagsStr = p.tags || '';
+          const existingTagsList = existingTagsStr
+            .split(',')
+            .map((t: string) => t.trim())
+            .filter(Boolean);
+
+          if (!existingTagsList.some((t: string) => t.toLowerCase() === cleanTag.toLowerCase())) {
+            existingTagsList.push(cleanTag);
+            const updatedTagsStr = existingTagsList.join(', ');
+
+            try {
+              await this.shopifyFetch(`products/${p.id}.json`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                  product: {
+                    id: p.id,
+                    tags: updatedTagsStr,
+                  },
+                }),
+              });
+              this.logger.log(`[Shopify Tag] Appended tag "${cleanTag}" to product ID ${p.id} (${p.title}).`);
+            } catch (tagErr: any) {
+              this.logger.error(`Error adding tag "${cleanTag}" to product ${p.id}: ${tagErr.message}`);
+            }
+          }
+        }
 
         for (const v of p.variants) {
           const rawCompareAt = parseFloat(v.compare_at_price || v.price || '0');

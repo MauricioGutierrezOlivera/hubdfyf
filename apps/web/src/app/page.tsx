@@ -174,6 +174,7 @@ export default function AppContainer() {
   // Bulk Price Adjustment Modal States
   const [isAdjustPriceModalOpen, setIsAdjustPriceModalOpen] = useState(false);
   const [selectedDiscountPercent, setSelectedDiscountPercent] = useState<number | "">("");
+  const [customShopifyTag, setCustomShopifyTag] = useState("");
   const [isApplyingPriceAdjustment, setIsApplyingPriceAdjustment] = useState(false);
   const [priceAdjustmentResult, setPriceAdjustmentResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -4785,6 +4786,7 @@ export default function AppContainer() {
                       onClick={() => {
                         setPriceAdjustmentResult(null);
                         setSelectedDiscountPercent("");
+                        setCustomShopifyTag("");
                         setIsAdjustPriceModalOpen(true);
                       }}
                       className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
@@ -5479,6 +5481,22 @@ export default function AppContainer() {
                               </select>
                             </div>
 
+                            <div className="space-y-1 pt-1">
+                              <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                                <span>🏷️</span> Etiqueta para Shopify (Opcional):
+                              </label>
+                              <input
+                                type="text"
+                                value={customShopifyTag}
+                                onChange={(e) => setCustomShopifyTag(e.target.value)}
+                                placeholder="Ej: Rebajas 2026, Venta Especial (opcional)"
+                                className="w-full border border-gray-300 dark:border-[#055740] rounded-xl px-3 py-2 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-gray-400"
+                              />
+                              <span className="text-[10px] text-gray-400 block font-normal">
+                                * Se agregará esta etiqueta en Shopify a los modelos filtrados preservando las anteriores.
+                              </span>
+                            </div>
+
                             <button
                               disabled={selectedDiscountPercent === "" || isApplyingPriceAdjustment || filteredStockItems.length === 0}
                               onClick={async () => {
@@ -5492,13 +5510,14 @@ export default function AppContainer() {
                                     body: JSON.stringify({
                                       modelNames: filteredStockItems.map((i: any) => i.model),
                                       discountPercentage: Number(selectedDiscountPercent),
+                                      tag: customShopifyTag.trim() || undefined,
                                     }),
                                   });
                                   const data = await res.json();
                                   if (res.ok && data.success) {
                                     setPriceAdjustmentResult({
                                       success: true,
-                                      message: `¡Se asignó el ${selectedDiscountPercent}% de descuento exitosamente! (${data.updatedVariantsCount} variantes de ${data.updatedModelsCount} modelos actualizadas en Shopify y BD).`,
+                                      message: `¡Se asignó el ${selectedDiscountPercent}% de descuento exitosamente! (${data.updatedVariantsCount} variantes de ${data.updatedModelsCount} modelos actualizadas en Shopify y BD${customShopifyTag.trim() ? ` con etiqueta "${customShopifyTag.trim()}"` : ''}).`,
                                     });
                                     fetchStockReport();
                                   } else {

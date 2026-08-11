@@ -61,12 +61,13 @@ export class ShopifyController {
    */
   @Post('bulk-adjust-prices')
   async bulkAdjustPrices(
-    @Body() body: { modelNames: string[]; discountPercentage: number },
+    @Body() body: { modelNames: string[]; discountPercentage: number; tag?: string },
   ) {
-    const { modelNames, discountPercentage } = body;
+    const { modelNames, discountPercentage, tag } = body;
     return this.shopifyService.bulkAdjustModelPrices(
       modelNames || [],
       discountPercentage ?? 0,
+      tag,
     );
   }
 }
