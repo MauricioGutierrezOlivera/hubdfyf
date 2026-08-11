@@ -262,11 +262,68 @@ export class ShopifyService implements OnModuleInit {
   /**
    * Sync all active products, prices, and compare_at_price values directly from Shopify into PostgreSQL database.
    */
+  private normalizeString(str: string): string {
+    return (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  /**
+   * Helper method to fetch ALL products from Shopify Admin REST API across all pages.
+   */
+  async getAllShopifyProducts(): Promise<any[]> {
+    const allProducts: any[] = [];
+    let endpoint = 'products.json?limit=250&status=active';
+
+    while (endpoint) {
+      const token = await this.getAccessToken();
+      const url = `https://${this.shopUrl}/admin/api/${this.apiVersion}/${endpoint}`;
+
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.error(`Shopify API error [${response.status}]: ${errorBody}`);
+        break;
+      }
+
+      const data = await response.json();
+      if (data.products && Array.isArray(data.products)) {
+        allProducts.push(...data.products);
+      }
+
+      const linkHeader = response.headers.get('link');
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        if (match) {
+          const nextUrl = new URL(match[1]);
+          endpoint = `products.json${nextUrl.search}`;
+        } else {
+          endpoint = '';
+        }
+      } else {
+        endpoint = '';
+      }
+    }
+
+    this.logger.log(`[ShopifyService] Fetched all ${allProducts.length} total products from Shopify catalog.`);
+    return allProducts;
+  }
+
+  /**
+   * Sync all active products, prices, and compare_at_price values directly from Shopify into PostgreSQL database.
+   */
   async syncCatalogFromShopify(): Promise<{ success: boolean; updatedVariantsCount: number }> {
     try {
       this.logger.log('[Shopify Sync] Syncing catalog & compareAtPrice values from Shopify...');
-      const res = await this.getProducts(250);
-      const products = res.products || [];
+      const products = await this.getAllShopifyProducts();
       let updatedVariantsCount = 0;
 
       for (const p of products) {
@@ -302,6 +359,8 @@ export class ShopifyService implements OnModuleInit {
 
   /**
    * Bulk adjust prices for a list of model names by discount percentage (0 = remove discount).
+   * STRICT ORDER OF OPERATIONS: Applies to Shopify REST API FIRST.
+   * Only updates PostgreSQL database if Shopify PUT request succeeds.
    */
   async bulkAdjustModelPrices(
     modelNames: string[],
@@ -312,30 +371,39 @@ export class ShopifyService implements OnModuleInit {
         `[Shopify Price Adjustment] Starting bulk price adjustment for ${modelNames.length} models with ${discountPercentage}% discount...`,
       );
 
-      // 1. Fetch products from Shopify
-      let nextUrl: string | null = 'products.json?limit=250';
-      const allShopifyProducts: any[] = [];
+      // 1. Fetch ALL products from Shopify (with multi-page pagination)
+      const allShopifyProducts = await this.getAllShopifyProducts();
+      const normModelNames = modelNames.map(m => this.normalizeString(m)).filter(Boolean);
 
-      while (nextUrl) {
-        const data: any = await this.shopifyFetch(nextUrl);
-        const products = data.products || [];
-        allShopifyProducts.push(...products);
-        nextUrl = null; // Shopify REST API limit=250
-      }
+      const isProductMatch = (shopifyTitle: string, modelName: string): boolean => {
+        const titleNorm = this.normalizeString(shopifyTitle);
+        const modelNorm = this.normalizeString(modelName);
 
-      const normModelNames = modelNames.map(m => m.trim().toLowerCase()).filter(Boolean);
+        if (!titleNorm || !modelNorm) return false;
+        if (titleNorm.includes(modelNorm) || modelNorm.includes(titleNorm)) return true;
 
-      // Match products in Shopify
+        // Compare non-generic distinctive words (length > 2)
+        const genericWords = new Set(['calzado', 'general', 'zapato', 'botin', 'blucher', 'bailarina', 'sandalia', 'yute', 'running', 'tacon']);
+        const modelWords = modelNorm.split(/\s+/).filter(w => w.length > 2 && !genericWords.has(w));
+        const titleWords = titleNorm.split(/\s+/).filter(w => w.length > 2);
+
+        if (modelWords.length > 0) {
+          return modelWords.every(mw => titleWords.some(tw => tw.includes(mw) || mw.includes(tw)));
+        }
+
+        return false;
+      };
+
+      // Match products in Shopify (diacritic & accent & word insensitive)
       const matchingProducts = allShopifyProducts.filter(p => {
-        const titleLower = p.title.trim().toLowerCase();
-        return normModelNames.some(m => titleLower.includes(m) || m.includes(titleLower));
+        return normModelNames.some(m => isProductMatch(p.title, m));
       });
 
       let updatedVariantsCount = 0;
       let updatedModelsCount = 0;
       const errors: string[] = [];
 
-      // Loop through matching products and update variants
+      // Loop through matching products and update variants FIRST on Shopify, then in DB
       for (const p of matchingProducts) {
         let modelHasUpdates = false;
 
@@ -359,7 +427,7 @@ export class ShopifyService implements OnModuleInit {
           const priceStr = String(newPriceVal);
 
           try {
-            // Send PUT to Shopify REST Admin API
+            // STEP 1: Send PUT request to Shopify REST Admin API FIRST
             await this.shopifyFetch(`variants/${v.id}.json`, {
               method: 'PUT',
               body: JSON.stringify({
@@ -371,7 +439,7 @@ export class ShopifyService implements OnModuleInit {
               }),
             });
 
-            // Also update local PostgreSQL database
+            // STEP 2: ONLY AFTER Shopify succeeds, update PostgreSQL database
             const shopifyId = String(v.id);
             await this.prisma.product.updateMany({
               where: { shopifyId },
@@ -384,8 +452,8 @@ export class ShopifyService implements OnModuleInit {
             updatedVariantsCount++;
             modelHasUpdates = true;
           } catch (vErr: any) {
-            this.logger.error(`Error updating variant ${v.id} (${p.title}): ${vErr.message}`);
-            errors.push(`Variant ${v.id} (${p.title}): ${vErr.message}`);
+            this.logger.error(`Error updating variant ${v.id} (${p.title}) on Shopify: ${vErr.message}`);
+            errors.push(`Variante ${v.id} (${p.title}): ${vErr.message}`);
           }
         }
 
@@ -394,38 +462,20 @@ export class ShopifyService implements OnModuleInit {
         }
       }
 
-      // Also handle models in PostgreSQL DB that might not be matched above
-      const dbProducts = await this.prisma.product.findMany({
-        where: {
-          OR: normModelNames.map(m => ({
-            name: { contains: m, mode: 'insensitive' },
-          })),
-        },
-      });
-
-      for (const dbP of dbProducts) {
-        if (!dbP.shopifyId) continue;
-        const compareAt = dbP.compareAtPrice || dbP.price || 0;
-        if (compareAt <= 0) continue;
-
-        let newPriceVal = discountPercentage === 0
-          ? Math.round(compareAt)
-          : Math.round(compareAt * (1 - discountPercentage / 100));
-
-        try {
-          await this.prisma.product.update({
-            where: { id: dbP.id },
-            data: {
-              price: newPriceVal,
-              compareAtPrice: compareAt,
-            },
-          });
-        } catch (e) {}
-      }
-
       this.logger.log(
-        `[Shopify Price Adjustment] Complete. Updated ${updatedVariantsCount} variants across ${updatedModelsCount} models.`,
+        `[Shopify Price Adjustment] Complete. Updated ${updatedVariantsCount} variants across ${updatedModelsCount} models on Shopify and DB.`,
       );
+
+      if (updatedVariantsCount === 0) {
+        return {
+          success: false,
+          updatedVariantsCount: 0,
+          updatedModelsCount: 0,
+          errors: [
+            `No se pudo actualizar ninguna variante en Shopify para los modelos seleccionados. La Base de Datos no fue modificada.`,
+          ],
+        };
+      }
 
       return {
         success: true,
