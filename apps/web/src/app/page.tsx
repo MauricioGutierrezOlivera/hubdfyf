@@ -177,6 +177,7 @@ export default function AppContainer() {
   const [customShopifyTag, setCustomShopifyTag] = useState("");
   const [isApplyingPriceAdjustment, setIsApplyingPriceAdjustment] = useState(false);
   const [priceAdjustmentResult, setPriceAdjustmentResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSyncingOnlineOrders, setIsSyncingOnlineOrders] = useState(false);
 
   // Returns / Exchanges States
   const [exchangeSearchQuery, setExchangeSearchQuery] = useState("");
@@ -3472,13 +3473,45 @@ export default function AppContainer() {
 
                       <div className="flex items-center gap-2">
                         {isAdmin && (
-                          <button
-                            onClick={() => setIsSellerRevenueModalOpen(true)}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 h-9"
-                            title="Ver total vendido en pesos por vendedora en el mes filtrado"
-                          >
-                            <span>💰</span> Venta por Vendedora
-                          </button>
+                          <>
+                            <button
+                              disabled={isSyncingOnlineOrders}
+                              onClick={async () => {
+                                setIsSyncingOnlineOrders(true);
+                                try {
+                                  const res = await fetch(`${API_BASE_URL}/shopify/sync-orders`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || 'admin' },
+                                    body: JSON.stringify({ limit: 50 }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    alert(`✅ ${data.message}`);
+                                    fetchStockReport();
+                                    fetchReportData();
+                                  } else {
+                                    alert(`⚠️ ${data.message || 'Error al sincronizar ventas online.'}`);
+                                  }
+                                } catch (err: any) {
+                                  alert(`⚠️ Error de conexión: ${err.message}`);
+                                } finally {
+                                  setIsSyncingOnlineOrders(false);
+                                }
+                              }}
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 h-9 disabled:opacity-50"
+                              title="Sincronizar ventas online recientes de Shopify y descontar su stock en la BD"
+                            >
+                              <span>🔄</span> {isSyncingOnlineOrders ? "Sincronizando..." : "Sincronizar Ventas Web"}
+                            </button>
+
+                            <button
+                              onClick={() => setIsSellerRevenueModalOpen(true)}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 h-9"
+                              title="Ver total vendido en pesos por vendedora en el mes filtrado"
+                            >
+                              <span>💰</span> Venta por Vendedora
+                            </button>
+                          </>
                         )}
 
                         {isAdmin ? (

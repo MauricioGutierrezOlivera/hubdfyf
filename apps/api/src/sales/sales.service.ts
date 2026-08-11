@@ -667,8 +667,14 @@ export class SalesService {
 
       for (const item of sale.items) {
         const isProductSock = isSock(item.product.name);
-        const originalPrice = item.price;
-        const discountVal = item.discount || 0;
+        const prodCompareAt = item.product?.compareAtPrice || 0;
+        let originalPrice = item.price;
+        let discountVal = item.discount || 0;
+
+        if (prodCompareAt > item.price && discountVal === 0) {
+          originalPrice = prodCompareAt;
+          discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+        }
         
         // If discountVal is <= 100, treat it as a percentage!
         const isPercent = discountVal > 0 && discountVal <= 100;
@@ -763,8 +769,14 @@ export class SalesService {
 
         for (const item of sale.items) {
           const isProductSock = isSock(item.product.name);
-          const originalPrice = item.price;
-          const discountVal = item.discount || 0;
+          const prodCompareAt = item.product?.compareAtPrice || 0;
+          let originalPrice = item.price;
+          let discountVal = item.discount || 0;
+
+          if (prodCompareAt > item.price && discountVal === 0) {
+            originalPrice = prodCompareAt;
+            discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+          }
           const isPercent = discountVal > 0 && discountVal <= 100;
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
@@ -823,8 +835,14 @@ export class SalesService {
 
         for (const item of sale.items) {
           const isProductSock = isSock(item.product.name);
-          const originalPrice = item.price;
-          const discountVal = item.discount || 0;
+          const prodCompareAt = item.product?.compareAtPrice || 0;
+          let originalPrice = item.price;
+          let discountVal = item.discount || 0;
+
+          if (prodCompareAt > item.price && discountVal === 0) {
+            originalPrice = prodCompareAt;
+            discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+          }
           const isPercent = discountVal > 0 && discountVal <= 100;
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
@@ -883,8 +901,14 @@ export class SalesService {
 
         for (const item of sale.items) {
           const isProductSock = isSock(item.product.name);
-          const originalPrice = item.price;
-          const discountVal = item.discount || 0;
+          const prodCompareAt = item.product?.compareAtPrice || 0;
+          let originalPrice = item.price;
+          let discountVal = item.discount || 0;
+
+          if (prodCompareAt > item.price && discountVal === 0) {
+            originalPrice = prodCompareAt;
+            discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+          }
           const isPercent = discountVal > 0 && discountVal <= 100;
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
@@ -1072,8 +1096,14 @@ export class SalesService {
 
         for (const item of sale.items) {
           const isProductSock = isSock(item.product.name);
-          const originalPrice = item.price;
-          const discountVal = item.discount || 0;
+          const prodCompareAt = item.product?.compareAtPrice || 0;
+          let originalPrice = item.price;
+          let discountVal = item.discount || 0;
+
+          if (prodCompareAt > item.price && discountVal === 0) {
+            originalPrice = prodCompareAt;
+            discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+          }
           const isPercent = discountVal > 0 && discountVal <= 100;
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
@@ -1236,8 +1266,14 @@ export class SalesService {
         if (item.quantity <= 0) continue;
         if (isProductSockOrAccessory(item.product.name)) continue;
 
-        const originalPrice = item.price;
-        const discountVal = item.discount || 0;
+        const prodCompareAt = item.product?.compareAtPrice || 0;
+        let originalPrice = item.price;
+        let discountVal = item.discount || 0;
+
+        if (prodCompareAt > item.price && discountVal === 0) {
+          originalPrice = prodCompareAt;
+          discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+        }
         const isPercent = discountVal > 0 && discountVal <= 100;
         const discountAmount = isPercent
           ? Math.round(originalPrice * (discountVal / 100))

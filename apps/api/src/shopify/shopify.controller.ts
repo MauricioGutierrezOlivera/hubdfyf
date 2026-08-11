@@ -42,8 +42,17 @@ export class ShopifyController {
   @Post('webhooks/orders')
   async handleOrderWebhook(@Body() body: any) {
     this.logger.log(`Webhook received: Order #${body.order_number || body.id}`);
-    // TODO: Process the online order and update local inventory
-    return { received: true };
+    const res = await this.shopifyService.processShopifyOrder(body);
+    return { received: true, ...res };
+  }
+
+  /**
+   * POST /shopify/sync-orders
+   * Manually or automatically sync recent online sales from Shopify to PostgreSQL DB & deduct stock.
+   */
+  @Post('sync-orders')
+  async syncOrders(@Body() body?: { limit?: number }) {
+    return this.shopifyService.syncOrdersFromShopify(body?.limit || 50);
   }
 
   /**

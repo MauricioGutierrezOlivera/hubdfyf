@@ -51,10 +51,13 @@ export class ShopifyService implements OnModuleInit {
     } else {
       this.logger.log(`Shopify configured for store: ${this.shopUrl}`);
       this.logger.log('Using Client Credentials Grant for authentication');
-      // Trigger background catalog sync on startup to populate compareAtPrice & prices
+      // Trigger background catalog sync & online order sync on startup
       setTimeout(() => {
         this.syncCatalogFromShopify().catch((err) => {
           this.logger.error(`Initial Shopify catalog sync failed: ${err}`);
+        });
+        this.syncOrdersFromShopify().catch((err) => {
+          this.logger.error(`Initial Shopify order sync failed: ${err}`);
         });
       }, 5000);
     }
@@ -535,6 +538,254 @@ export class ShopifyService implements OnModuleInit {
       return { success: true, shop: data.shop };
     } catch (error: any) {
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Process a single online order from Shopify (from Webhook or Order Sync API).
+   * Idempotent: Prevents duplicate sales creation and double inventory deduction.
+   */
+  async processShopifyOrder(
+    order: any,
+  ): Promise<{ success: boolean; created: boolean; message: string; saleId?: string }> {
+    try {
+      if (!order || (!order.id && !order.order_number)) {
+        return { success: false, created: false, message: 'Payload de pedido inválido' };
+      }
+
+      const orderNumberStr = String(order.order_number || order.name || order.id || '');
+      const orderNoteKey = `Shopify Order #${orderNumberStr} (ID: ${order.id})`;
+
+      // 1. Idempotency check: Do not process duplicate orders
+      const existingSale = await this.prisma.sale.findFirst({
+        where: {
+          notes: orderNoteKey,
+        },
+      });
+
+      if (existingSale) {
+        return {
+          success: true,
+          created: false,
+          message: `El pedido #${orderNumberStr} ya fue procesado previamente.`,
+          saleId: existingSale.id,
+        };
+      }
+
+      // 2. Ensure default store exists
+      const defaultStore = await this.prisma.store.findFirst();
+      if (!defaultStore) {
+        throw new Error('No store configured in PostgreSQL database');
+      }
+      const storeId = defaultStore.id;
+
+      // 3. Customer Sync / Linking & Real-Time Updating
+      let customerId: string | null = null;
+      const shopifyCustId = order.customer?.id ? String(order.customer.id) : null;
+      const custEmail =
+        order.customer?.email || order.email || order.shipping_address?.email || order.billing_address?.email || null;
+
+      const custName =
+        [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(' ') ||
+        [order.shipping_address?.first_name, order.shipping_address?.last_name].filter(Boolean).join(' ') ||
+        [order.billing_address?.first_name, order.billing_address?.last_name].filter(Boolean).join(' ') ||
+        'Cliente Shopify';
+
+      const custPhone =
+        order.customer?.phone ||
+        order.customer?.default_address?.phone ||
+        order.shipping_address?.phone ||
+        order.billing_address?.phone ||
+        order.phone ||
+        null;
+
+      if (shopifyCustId || custEmail || custPhone) {
+        let custRecord = null;
+        if (shopifyCustId) {
+          custRecord = await this.prisma.customer.findUnique({ where: { shopifyId: shopifyCustId } });
+        }
+        if (!custRecord && custEmail) {
+          custRecord = await this.prisma.customer.findFirst({ where: { email: custEmail } });
+        }
+        if (!custRecord && custPhone) {
+          custRecord = await this.prisma.customer.findFirst({ where: { phone: custPhone } });
+        }
+
+        if (custRecord) {
+          customerId = custRecord.id;
+          // Real-time Update: Check if customer record can be enriched with new info
+          const updateData: any = {};
+          if (!custRecord.shopifyId && shopifyCustId) updateData.shopifyId = shopifyCustId;
+          if ((!custRecord.email || custRecord.email === '') && custEmail) updateData.email = custEmail;
+          if ((!custRecord.phone || custRecord.phone === '') && custPhone) updateData.phone = custPhone;
+          if ((custRecord.name === 'Cliente Shopify' || !custRecord.name) && custName && custName !== 'Cliente Shopify') {
+            updateData.name = custName;
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            try {
+              await this.prisma.customer.update({
+                where: { id: custRecord.id },
+                data: updateData,
+              });
+              this.logger.log(
+                `[Shopify Customer Sync] Updated customer ID ${custRecord.id} (${custRecord.name}) with new data: ${JSON.stringify(updateData)}`,
+              );
+            } catch (e: any) {
+              this.logger.warn(`[Shopify Customer Sync] Non-fatal error updating customer ${custRecord.id}: ${e.message}`);
+            }
+          }
+        } else {
+          try {
+            const newCust = await this.prisma.customer.create({
+              data: {
+                shopifyId: shopifyCustId || null,
+                name: custName,
+                email: custEmail,
+                phone: custPhone,
+              },
+            });
+            customerId = newCust.id;
+            this.logger.log(
+              `[Shopify Customer Sync] Registered new customer: ${custName} (${custEmail || custPhone || 'Sin contacto'})`,
+            );
+          } catch (e: any) {
+            this.logger.warn(`[Shopify Customer Sync] Failed to create new customer ${custName}: ${e.message}`);
+            if (custEmail) {
+              const c = await this.prisma.customer.findFirst({ where: { email: custEmail } });
+              if (c) customerId = c.id;
+            }
+          }
+        }
+      }
+
+      // 4. Create Sale Record
+      const totalAmount = parseFloat(order.total_price || '0');
+      const orderDate = order.created_at ? new Date(order.created_at) : new Date();
+      const paymentMethodStr = order.gateway || order.payment_gateway_names?.[0] || 'Shopify Web';
+
+      const sale = await this.prisma.sale.create({
+        data: {
+          storeId,
+          customerId,
+          type: 'NORMAL',
+          total: totalAmount,
+          notes: orderNoteKey,
+          date: orderDate,
+          vendedor: 'ONLINE',
+          channel: 'ONLINE',
+          paymentMethod: paymentMethodStr,
+        },
+      });
+
+      // 5. Match line items, create SaleItems & update inventory
+      let itemsCount = 0;
+      if (Array.isArray(order.line_items)) {
+        for (const item of order.line_items) {
+          const variantIdStr = String(item.variant_id || '');
+          const skuStr = item.sku || null;
+          const qty = item.quantity || 1;
+          const itemPrice = parseFloat(item.price || '0');
+          const itemDiscount = parseFloat(item.total_discount || '0');
+
+          let product = null;
+          if (variantIdStr) {
+            product = await this.prisma.product.findUnique({ where: { shopifyId: variantIdStr } });
+          }
+          if (!product && skuStr) {
+            product = await this.prisma.product.findFirst({ where: { sku: skuStr } });
+          }
+
+          if (product) {
+            const compareAt = product.compareAtPrice || 0;
+            let originalRefPrice = itemPrice;
+            let discountPct = 0;
+
+            if (compareAt > itemPrice) {
+              originalRefPrice = compareAt;
+              discountPct = Math.round(((compareAt - itemPrice) / compareAt) * 100);
+            } else if (itemDiscount > 0 && qty > 0) {
+              const totalBeforeDiscount = itemPrice + (itemDiscount / qty);
+              originalRefPrice = totalBeforeDiscount;
+              discountPct = Math.round(((itemDiscount / qty) / totalBeforeDiscount) * 100);
+            }
+
+            await this.prisma.saleItem.create({
+              data: {
+                saleId: sale.id,
+                productId: product.id,
+                quantity: qty,
+                price: originalRefPrice,
+                discount: discountPct,
+              },
+            });
+            itemsCount++;
+
+            // Deduct stock from Inventory
+            const inv = await this.prisma.inventory.findUnique({
+              where: { storeId_productId: { storeId, productId: product.id } },
+            });
+
+            if (inv) {
+              await this.prisma.inventory.update({
+                where: { id: inv.id },
+                data: { quantity: Math.max(0, inv.quantity - qty) },
+              });
+            }
+          }
+        }
+      }
+
+      this.logger.log(
+        `[Shopify Order Sync] Created online Sale ID ${sale.id} for Order #${orderNumberStr}. Total: $${order.total_price}`,
+      );
+      return {
+        success: true,
+        created: true,
+        message: `Pedido #${orderNumberStr} procesado exitosamente.`,
+        saleId: sale.id,
+      };
+    } catch (err: any) {
+      this.logger.error(`[Shopify Order Sync] Failed to process order #${order?.order_number || order?.id}: ${err.message}`);
+      return { success: false, created: false, message: `Error: ${err.message}` };
+    }
+  }
+
+  /**
+   * Sync recent orders directly from Shopify REST API into PostgreSQL database.
+   */
+  async syncOrdersFromShopify(limit: number = 50): Promise<{ success: boolean; totalFetched: number; createdCount: number; message: string }> {
+    try {
+      this.logger.log(`[Shopify Order Sync] Fetching recent ${limit} orders from Shopify API...`);
+
+      const ordersData = await this.shopifyFetch<any>(`orders.json?status=any&limit=${limit}`);
+      const orderList = ordersData.orders || [];
+
+      let createdCount = 0;
+      for (const order of orderList) {
+        const res = await this.processShopifyOrder(order);
+        if (res.created) {
+          createdCount++;
+        }
+      }
+
+      this.logger.log(
+        `[Shopify Order Sync] Sync complete. Inspected ${orderList.length} orders from Shopify, created ${createdCount} new online sales.`,
+      );
+      return {
+        success: true,
+        totalFetched: orderList.length,
+        createdCount,
+        message: `Se inspeccionaron ${orderList.length} pedidos en Shopify. Se registraron ${createdCount} nuevas ventas online y se descontó su inventario en la BD.`,
+      };
+    } catch (err: any) {
+      this.logger.error(`[Shopify Order Sync] Failed to sync orders: ${err.message}`);
+      return {
+        success: false,
+        totalFetched: 0,
+        createdCount: 0,
+        message: `Error al sincronizar pedidos: ${err.message}`,
+      };
     }
   }
 }
