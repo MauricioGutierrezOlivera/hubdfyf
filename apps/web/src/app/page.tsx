@@ -4750,6 +4750,8 @@ export default function AppContainer() {
               return true;
             });
 
+            const filteredStockPairsTotal = filteredStockItems.reduce((acc: number, item: any) => acc + (item.total || 0), 0);
+
             const allSizes = ["35", "36", "37", "38", "39", "40", "41", "42"];
 
             return (
@@ -4777,9 +4779,16 @@ export default function AppContainer() {
                     <div className="bg-emerald-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-emerald-400/40 flex items-center gap-2">
                       <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Filtrados:
+                        Modelos Filtrados:
                       </span>
                       <span className="text-sm font-black text-white">{filteredStockItems.length}</span>
+                    </div>
+
+                    <div className="bg-emerald-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-emerald-400/40 flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wider">
+                        Pares Filtrados:
+                      </span>
+                      <span className="text-sm font-black text-white">{filteredStockPairsTotal.toLocaleString("es-CL")} <span className="text-[10px] font-bold text-emerald-200">un.</span></span>
                     </div>
 
                     <button
