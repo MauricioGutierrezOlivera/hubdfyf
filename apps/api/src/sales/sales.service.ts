@@ -666,7 +666,7 @@ export class SalesService {
       const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
 
       for (const item of sale.items) {
-        const isProductSock = isSock(item.product.name);
+        const isProductSock = isSock(item.product?.name || '');
         const prodCompareAt = item.product?.compareAtPrice || 0;
         let originalPrice = item.price;
         let discountVal = item.discount || 0;
@@ -720,8 +720,8 @@ export class SalesService {
           saleId: sale.id,
           date: sale.date,
           event: eventType,
-          model: `${item.product.name}${item.product.color ? ` - ${item.product.color}` : ''}`,
-          size: item.product.size,
+          model: item.product ? `${item.product.name}${item.product.color ? ` - ${item.product.color}` : ''}` : 'Producto',
+          size: item.product?.size || 'UN',
           originalPrice,
           salePrice,
           discount: discountAmount * item.quantity,
@@ -768,7 +768,7 @@ export class SalesService {
         const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
 
         for (const item of sale.items) {
-          const isProductSock = isSock(item.product.name);
+          const isProductSock = isSock(item.product?.name || '');
           const prodCompareAt = item.product?.compareAtPrice || 0;
           let originalPrice = item.price;
           let discountVal = item.discount || 0;
@@ -834,7 +834,7 @@ export class SalesService {
         const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
 
         for (const item of sale.items) {
-          const isProductSock = isSock(item.product.name);
+          const isProductSock = isSock(item.product?.name || '');
           const prodCompareAt = item.product?.compareAtPrice || 0;
           let originalPrice = item.price;
           let discountVal = item.discount || 0;
@@ -900,7 +900,7 @@ export class SalesService {
         const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
 
         for (const item of sale.items) {
-          const isProductSock = isSock(item.product.name);
+          const isProductSock = isSock(item.product?.name || '');
           const prodCompareAt = item.product?.compareAtPrice || 0;
           let originalPrice = item.price;
           let discountVal = item.discount || 0;
@@ -1095,7 +1095,7 @@ export class SalesService {
           (sale.channel || '').toUpperCase().includes('WEB');
 
         for (const item of sale.items) {
-          const isProductSock = isSock(item.product.name);
+          const isProductSock = isSock(item.product?.name || '');
           const prodCompareAt = item.product?.compareAtPrice || 0;
           let originalPrice = item.price;
           let discountVal = item.discount || 0;
@@ -1263,8 +1263,8 @@ export class SalesService {
       const normVendedor = (sale.vendedor || '').toLowerCase();
 
       for (const item of sale.items) {
-        if (item.quantity <= 0) continue;
-        if (isProductSockOrAccessory(item.product.name)) continue;
+        if (!item.product || item.quantity <= 0) continue;
+        if (isProductSockOrAccessory(item.product.name || '')) continue;
 
         const prodCompareAt = item.product?.compareAtPrice || 0;
         let originalPrice = item.price;

@@ -3923,31 +3923,32 @@ export default function AppContainer() {
 
           {/* TAB: Análisis Ventas (Gráficos y Métricas) */}
           {activeTab === "analytics" && (() => {
-            const summary = analyticsData?.summary || {
-              totalAmount: 0,
-              onlineAmount: 0,
-              physicalAmount: 0,
-              totalUnits: 0,
-              onlineUnits: 0,
-              physicalUnits: 0,
-              averageMonthlyAmount: 0,
+            const summary = {
+              totalAmount: analyticsData?.summary?.totalAmount || 0,
+              onlineAmount: analyticsData?.summary?.onlineAmount || 0,
+              physicalAmount: analyticsData?.summary?.physicalAmount || 0,
+              totalUnits: analyticsData?.summary?.totalUnits || 0,
+              onlineUnits: analyticsData?.summary?.onlineUnits || 0,
+              physicalUnits: analyticsData?.summary?.physicalUnits || 0,
+              averageMonthlyAmount: analyticsData?.summary?.averageMonthlyAmount || 0,
             };
-            const monthlyData: any[] = analyticsData?.monthlyData || [];
+            const monthlyData: any[] = Array.isArray(analyticsData?.monthlyData) ? analyticsData.monthlyData : [];
 
             // SVG Vector Chart Calculations
-            const maxMonthlyAmount = Math.max(...monthlyData.map((m: any) => m.totalAmount || 0), 1000000);
+            const maxMonthlyAmount = Math.max(...monthlyData.map((m: any) => m?.totalAmount || 0), 1000000);
             const gridMax = Math.ceil(maxMonthlyAmount / 5000000) * 5000000 || 5000000;
 
             const formatShortCLP = (val: number) => {
-              if (val >= 1000000) {
-                const millions = (val / 1000000).toFixed(1).replace('.0', '');
+              const num = val || 0;
+              if (num >= 1000000) {
+                const millions = (num / 1000000).toFixed(1).replace('.0', '');
                 return `$${millions}M`;
               }
-              if (val >= 1000) {
-                const thousands = Math.round(val / 1000);
+              if (num >= 1000) {
+                const thousands = Math.round(num / 1000);
                 return `$${thousands}K`;
               }
-              return `$${val}`;
+              return `$${num}`;
             };
 
             const chartWidth = 900;
@@ -3965,9 +3966,10 @@ export default function AppContainer() {
 
             // Generate points for vector curve
             const vectorPoints = monthlyData.map((m: any, idx: number) => {
+              const amt = m?.totalAmount || 0;
               const x = paddingLeft + (idx + 0.5) * stepW;
-              const y = paddingTop + innerH - (m.totalAmount / gridMax) * innerH;
-              return { x, y, amount: m.totalAmount, label: m.monthLabel };
+              const y = paddingTop + innerH - (amt / gridMax) * innerH;
+              return { x: isNaN(x) ? 0 : x, y: isNaN(y) ? 0 : y, amount: amt, label: m?.monthLabel || "" };
             });
 
             // Smooth cubic Bezier path
