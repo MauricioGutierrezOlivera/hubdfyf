@@ -2895,14 +2895,20 @@ export default function AppContainer() {
                     <p className="text-sm text-gray-500 dark:text-gray-400">Base de datos limpia y unificada de clientela online y offline</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {isAdmin && (
+                    {(isAdmin || currentUser?.role === "VISITOR") && (
                       <button
                         onClick={() => {
+                          if (currentUser?.role === "VISITOR") return;
                           setCopiedEmailStatus(false);
                           setIsEmailExportModalOpen(true);
                         }}
-                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
-                        title="Exportar correos de clientes filtrados para Email Marketing"
+                        disabled={currentUser?.role === "VISITOR"}
+                        title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Exportar correos de clientes filtrados para Email Marketing"}
+                        className={`px-4 py-2.5 font-black rounded-2xl text-xs shadow-md transition-all flex items-center gap-2 ${
+                          currentUser?.role === "VISITOR"
+                            ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                            : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                        }`}
                       >
                         <span>📧</span> EXPORTAR CORREOS ({filteredEmails.length})
                       </button>
