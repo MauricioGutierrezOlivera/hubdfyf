@@ -24,13 +24,13 @@ export class UsersService {
     }
 
     // Role restrictions
-    if (creator.role === Role.CLERK) {
-      throw new ForbiddenException('VENDEDOR users cannot create users');
+    if (creator.role === Role.CLERK || creator.role === Role.VISITOR) {
+      throw new ForbiddenException('Los usuarios VENDEDOR y VISITA no pueden crear usuarios');
     }
 
     if (creator.role === Role.COUNTRY_ADMIN) {
-      if (data.role !== Role.CLERK) {
-        throw new ForbiddenException('ADMINISTRADOR TIENDA can only create VENDEDOR users');
+      if (data.role !== Role.CLERK && data.role !== Role.VISITOR) {
+        throw new ForbiddenException('ADMINISTRADOR TIENDA solo puede crear usuarios VENDEDOR o VISITA');
       }
 
       // Check if storeIds are within creator's stores
@@ -218,8 +218,8 @@ export class UsersService {
       throw new NotFoundException('Creator user not found');
     }
 
-    if (creator.role === Role.CLERK) {
-      throw new ForbiddenException('VENDEDOR users cannot edit users');
+    if (creator.role === Role.CLERK || creator.role === Role.VISITOR) {
+      throw new ForbiddenException('Los usuarios VENDEDOR y VISITA no pueden editar usuarios');
     }
 
     const targetUser = await this.prisma.user.findUnique({
@@ -230,8 +230,10 @@ export class UsersService {
     }
 
     if (creator.role === Role.COUNTRY_ADMIN) {
-      if (targetUser.role !== Role.CLERK || data.role !== Role.CLERK) {
-        throw new ForbiddenException('ADMINISTRADOR TIENDA can only manage VENDEDOR users');
+      const isTargetAllowed = targetUser.role === Role.CLERK || targetUser.role === Role.VISITOR;
+      const isNewRoleAllowed = !data.role || data.role === Role.CLERK || data.role === Role.VISITOR;
+      if (!isTargetAllowed || !isNewRoleAllowed) {
+        throw new ForbiddenException('ADMINISTRADOR TIENDA solo puede gestionar usuarios VENDEDOR y VISITA');
       }
 
       const creatorStores = await this.prisma.userStore.findMany({

@@ -20,7 +20,7 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: "SUPER_ADMIN" | "COUNTRY_ADMIN" | "CLERK";
+  role: "SUPER_ADMIN" | "COUNTRY_ADMIN" | "CLERK" | "VISITOR";
   countryId: string;
   stores: { store: Store }[];
 }
@@ -283,7 +283,7 @@ export default function AppContainer() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"COUNTRY_ADMIN" | "CLERK">("CLERK");
+  const [newUserRole, setNewUserRole] = useState<"COUNTRY_ADMIN" | "CLERK" | "VISITOR">("CLERK");
   const [newUserCountryId, setNewUserCountryId] = useState("");
   const [newUserStoreIds, setNewUserStoreIds] = useState<string[]>([]);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -1430,7 +1430,7 @@ export default function AppContainer() {
                 {usersList.length > 0 ? (
                   usersList.map((user) => (
                     <option key={user.id} value={user.email}>
-                      {user.name} ({user.role === "SUPER_ADMIN" ? "ADMIN" : user.role === "COUNTRY_ADMIN" ? "Admin" : "Vendedor"})
+                      {user.name} ({user.role === "SUPER_ADMIN" ? "ADMIN" : user.role === "COUNTRY_ADMIN" ? "Admin" : user.role === "VISITOR" ? "VISITA" : "Vendedor"})
                     </option>
                   ))
                 ) : (
@@ -1618,7 +1618,7 @@ export default function AppContainer() {
 
         {/* Sidebar Footer: Configuración */}
         <div className="p-4 border-t border-gray-200 dark:border-[#055740]">
-          {currentUser.role !== "CLERK" ? (
+          {(currentUser.role === "SUPER_ADMIN" || currentUser.role === "COUNTRY_ADMIN") ? (
             <button 
               onClick={() => setActiveTab("admin")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
@@ -1682,7 +1682,7 @@ export default function AppContainer() {
                      <span className="text-[10px] opacity-60">▼</span>
                    </span>
                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider">
-                     {currentUser.role === "SUPER_ADMIN" ? "ADMIN" : currentUser.role === "COUNTRY_ADMIN" ? "Admin Tienda" : "Vendedor"}
+                     {currentUser.role === "SUPER_ADMIN" ? "ADMIN" : currentUser.role === "COUNTRY_ADMIN" ? "Admin Tienda" : currentUser.role === "VISITOR" ? "VISITA" : "Vendedor"}
                    </span>
                 </div>
               </button>
@@ -1697,7 +1697,7 @@ export default function AppContainer() {
                       <p className="text-xs font-black text-gray-900 dark:text-white">{currentUser.name}</p>
                       <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">{currentUser.email}</p>
                       <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-black rounded-md uppercase">
-                        {currentUser.role === "SUPER_ADMIN" ? "Administrador General" : currentUser.role === "COUNTRY_ADMIN" ? "Admin de Tienda" : "Vendedor / POS"}
+                        {currentUser.role === "SUPER_ADMIN" ? "Administrador General" : currentUser.role === "COUNTRY_ADMIN" ? "Admin de Tienda" : currentUser.role === "VISITOR" ? "Perfil Visita (Solo Lectura)" : "Vendedor / POS"}
                       </span>
                     </div>
 
@@ -1916,10 +1916,17 @@ export default function AppContainer() {
                           </button>
                           <button 
                             onClick={() => {
+                              if (currentUser?.role === "VISITOR") return;
                               setNewCustError("");
                               setIsNewCustomerOpen(true);
                             }}
-                            className="px-3 h-full bg-dfyf-green text-white font-bold rounded-lg text-xs hover:bg-[#046c4e] transition-all cursor-pointer whitespace-nowrap"
+                            disabled={currentUser?.role === "VISITOR"}
+                            title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : undefined}
+                            className={`px-3 h-full font-bold rounded-lg text-xs transition-all whitespace-nowrap ${
+                              currentUser?.role === "VISITOR"
+                                ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                                : "bg-dfyf-green text-white hover:bg-[#046c4e] cursor-pointer"
+                            }`}
                           >
                             Nuevo
                           </button>
@@ -2038,8 +2045,13 @@ export default function AppContainer() {
 
                   <button 
                     onClick={handleRegisterSale}
-                    disabled={isRegisteringSale || cart.length === 0}
-                    className="w-full bg-dfyf-green text-white font-bold py-3.5 rounded-xl hover:bg-[#046c4e] transition-colors shadow-md shadow-dfyf-green/20 mt-1 cursor-pointer flex items-center justify-center gap-2"
+                    disabled={isRegisteringSale || cart.length === 0 || currentUser?.role === "VISITOR"}
+                    title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : undefined}
+                    className={`w-full font-bold py-3.5 rounded-xl transition-colors shadow-md mt-1 flex items-center justify-center gap-2 ${
+                      currentUser?.role === "VISITOR"
+                        ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                        : "bg-dfyf-green hover:bg-[#046c4e] text-white shadow-dfyf-green/20 cursor-pointer"
+                    }`}
                   >
                     {isRegisteringSale ? "Registrando..." : "Registrar Venta"}
                   </button>
@@ -2521,12 +2533,13 @@ export default function AppContainer() {
                     </p>
 
                     <button
-                      disabled={!canConfirm || isProcessingExchange}
+                      disabled={!canConfirm || isProcessingExchange || currentUser?.role === "VISITOR"}
                       onClick={submitExchangeOrRefund}
+                      title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : undefined}
                       className={`w-full py-4 rounded-2xl font-black text-md transition-all shadow-md flex items-center justify-center gap-2 ${
-                        canConfirm && !isProcessingExchange
+                        canConfirm && !isProcessingExchange && currentUser?.role !== "VISITOR"
                           ? "bg-dfyf-green hover:bg-[#046c4e] text-white cursor-pointer"
-                          : "bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                          : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
                       }`}
                     >
                       {isProcessingExchange ? (
@@ -2896,6 +2909,7 @@ export default function AppContainer() {
                     )}
                     <button
                       onClick={() => {
+                        if (currentUser?.role === "VISITOR") return;
                         setNewCustomerName("");
                         setNewCustomerRut("");
                         setNewCustomerEmail("");
@@ -2903,7 +2917,13 @@ export default function AppContainer() {
                         setNewCustomerError(null);
                         setIsNewCustomerModalOpen(true);
                       }}
-                      className="px-4 py-2.5 bg-dfyf-green hover:bg-[#055740] text-white font-black rounded-2xl text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+                      disabled={currentUser?.role === "VISITOR"}
+                      title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : undefined}
+                      className={`px-4 py-2.5 font-black rounded-2xl text-xs shadow-md transition-all flex items-center gap-2 ${
+                        currentUser?.role === "VISITOR"
+                          ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                          : "bg-dfyf-green hover:bg-[#055740] text-white cursor-pointer"
+                      }`}
                     >
                       <span>👤+</span> NUEVO CLIENTE
                     </button>
@@ -3076,18 +3096,33 @@ export default function AppContainer() {
                               <td className="p-4 text-center">
                                 <div className="flex items-center justify-center gap-2">
                                   <button
-                                    onClick={() => openEditCustomerModal(cust)}
-                                    className="px-3 py-1.5 bg-dfyf-green hover:bg-[#055740] text-white font-bold rounded-xl text-xs shadow-sm transition-colors cursor-pointer"
+                                    onClick={() => {
+                                      if (currentUser?.role === "VISITOR") return;
+                                      openEditCustomerModal(cust);
+                                    }}
+                                    disabled={currentUser?.role === "VISITOR"}
+                                    title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : undefined}
+                                    className={`px-3 py-1.5 font-bold rounded-xl text-xs shadow-sm transition-colors ${
+                                      currentUser?.role === "VISITOR"
+                                        ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                                        : "bg-dfyf-green hover:bg-[#055740] text-white cursor-pointer"
+                                    }`}
                                   >
                                     Editar
                                   </button>
                                   <button
                                     onClick={() => {
+                                      if (currentUser?.role === "VISITOR") return;
                                       setDeletingCustomer(cust);
                                       setDeleteCustomerError(null);
                                     }}
-                                    className="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 rounded-xl text-xs transition-colors cursor-pointer border border-red-200 dark:border-red-800/60"
-                                    title="Eliminar cliente"
+                                    disabled={currentUser?.role === "VISITOR"}
+                                    title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Eliminar cliente"}
+                                    className={`p-1.5 text-xs transition-colors border rounded-xl ${
+                                      currentUser?.role === "VISITOR"
+                                        ? "bg-gray-200 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 opacity-50 cursor-not-allowed"
+                                        : "bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/60 cursor-pointer"
+                                    }`}
                                   >
                                     🗑️
                                   </button>
@@ -3472,11 +3507,12 @@ export default function AppContainer() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {isAdmin && (
+                        {(isAdmin || currentUser?.role === "VISITOR") && (
                           <>
                             <button
-                              disabled={isSyncingOnlineOrders}
+                              disabled={isSyncingOnlineOrders || currentUser?.role === "VISITOR"}
                               onClick={async () => {
+                                if (currentUser?.role === "VISITOR") return;
                                 setIsSyncingOnlineOrders(true);
                                 try {
                                   const res = await fetch(`${API_BASE_URL}/shopify/sync-orders`, {
@@ -3498,8 +3534,12 @@ export default function AppContainer() {
                                   setIsSyncingOnlineOrders(false);
                                 }
                               }}
-                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 h-9 disabled:opacity-50"
-                              title="Sincronizar ventas online recientes de Shopify y descontar su stock en la BD"
+                              className={`px-3.5 py-1.5 font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 h-9 ${
+                                currentUser?.role === "VISITOR"
+                                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                                  : "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer disabled:opacity-50"
+                              }`}
+                              title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Sincronizar ventas online recientes de Shopify y descontar su stock en la BD"}
                             >
                               <span>🔄</span> {isSyncingOnlineOrders ? "Sincronizando..." : "Sincronizar Ventas Web"}
                             </button>
@@ -4832,13 +4872,19 @@ export default function AppContainer() {
 
                     <button
                       onClick={() => {
+                        if (currentUser?.role === "VISITOR") return;
                         setPriceAdjustmentResult(null);
                         setSelectedDiscountPercent("");
                         setCustomShopifyTag("");
                         setIsAdjustPriceModalOpen(true);
                       }}
-                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-                      title="Adecuar precios o descuentos para todos los modelos filtrados"
+                      disabled={currentUser?.role === "VISITOR"}
+                      title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Adecuar precios o descuentos para todos los modelos filtrados"}
+                      className={`px-3.5 py-1.5 font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0 ${
+                        currentUser?.role === "VISITOR"
+                          ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                          : "bg-emerald-500 hover:bg-emerald-400 text-emerald-950 cursor-pointer"
+                      }`}
                     >
                       <span>🏷️</span> Adecuar Precio
                     </button>
@@ -5692,6 +5738,7 @@ export default function AppContainer() {
                           <option value="COUNTRY_ADMIN">ADMINISTRADOR TIENDA</option>
                         )}
                         <option value="CLERK">VENDEDOR</option>
+                        <option value="VISITOR">VISITA</option>
                       </select>
                     </div>
 
@@ -5790,9 +5837,11 @@ export default function AppContainer() {
                                     ? "bg-purple-100 text-purple-700" 
                                     : u.role === "COUNTRY_ADMIN" 
                                       ? "bg-blue-100 text-blue-700" 
-                                      : "bg-green-100 text-green-700"
+                                      : u.role === "VISITOR"
+                                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300"
+                                        : "bg-green-100 text-green-700"
                                 }`}>
-                                  {u.role === "SUPER_ADMIN" ? "ADMIN" : u.role === "COUNTRY_ADMIN" ? "Admin Tienda" : "Vendedor"}
+                                  {u.role === "SUPER_ADMIN" ? "ADMIN" : u.role === "COUNTRY_ADMIN" ? "Admin Tienda" : u.role === "VISITOR" ? "VISITA" : "Vendedor"}
                                 </span>
                               </td>
                               <td className="p-3 text-xs font-bold text-gray-500 dark:text-gray-400">
