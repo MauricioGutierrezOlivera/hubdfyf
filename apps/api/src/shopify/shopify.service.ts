@@ -51,6 +51,20 @@ export class ShopifyService implements OnModuleInit {
     } else {
       this.logger.log(`Shopify configured for store: ${this.shopUrl}`);
       this.logger.log('Using Client Credentials Grant for authentication');
+
+      // Start automatic background order polling every 5 minutes (lightweight limit=10)
+      setInterval(() => {
+        this.syncOrdersFromShopify(10).catch((err) => {
+          this.logger.error(`Automatic background order sync failed: ${err.message}`);
+        });
+      }, 5 * 60 * 1000);
+
+      // Initial lightweight sync 15 seconds after server startup
+      setTimeout(() => {
+        this.syncOrdersFromShopify(10).catch((err) => {
+          this.logger.error(`Initial background order sync failed: ${err.message}`);
+        });
+      }, 15000);
     }
   }
 
