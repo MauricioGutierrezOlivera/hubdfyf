@@ -4106,26 +4106,26 @@ export default function AppContainer() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
                         <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Monto Total Periodo</span>
-                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${summary.totalAmount.toLocaleString("es-CL")}</span>
+                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.totalAmount || 0).toLocaleString("es-CL")}</span>
                         <span className="text-[11px] font-bold text-gray-400 mt-1 block">{monthlyData.length} meses seleccionados</span>
                       </div>
 
                       <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
                         <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Ventas ONLINE</span>
-                        <span className="text-2xl font-black text-amber-600 dark:text-amber-400 block mt-0.5">${summary.onlineAmount.toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctOnline}% del total ({summary.onlineUnits} pares)</span>
+                        <span className="text-2xl font-black text-amber-600 dark:text-amber-400 block mt-0.5">${(summary.onlineAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctOnline}% del total ({summary.onlineUnits || 0} pares)</span>
                       </div>
 
                       <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Tienda Física / Resto</span>
-                        <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">${summary.physicalAmount.toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctPhysical}% del total ({summary.physicalUnits} pares)</span>
+                        <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">${(summary.physicalAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctPhysical}% del total ({summary.physicalUnits || 0} pares)</span>
                       </div>
 
                       <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
                         <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Promedio Mensual</span>
-                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${summary.averageMonthlyAmount.toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">Total pares: {summary.totalUnits} pares</span>
+                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.averageMonthlyAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">Total pares: {summary.totalUnits || 0} pares</span>
                       </div>
                     </div>
                   </div>
@@ -4363,7 +4363,11 @@ export default function AppContainer() {
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
                           {monthlyData.map((m: any, idx: number) => {
-                            const rowPctOnline = m.totalAmount > 0 ? ((m.onlineAmount / m.totalAmount) * 100).toFixed(1) : "0";
+                            const totAmt = m?.totalAmount || 0;
+                            const onlAmt = m?.onlineAmount || 0;
+                            const phyAmt = m?.physicalAmount || 0;
+                            const totUnits = m?.totalUnits || 0;
+                            const rowPctOnline = totAmt > 0 ? ((onlAmt / totAmt) * 100).toFixed(1) : "0";
                             return (
                               <tr 
                                 key={idx}
@@ -4371,12 +4375,12 @@ export default function AppContainer() {
                                 onMouseEnter={() => setHoveredAnalyticsMonth(idx)}
                                 onMouseLeave={() => setHoveredAnalyticsMonth(null)}
                               >
-                                <td className="p-3 pl-5 font-black text-gray-900 dark:text-white">{m.fullMonthLabel}</td>
-                                <td className="p-3 text-right font-black text-gray-950 dark:text-white">${m.totalAmount.toLocaleString("es-CL")}</td>
-                                <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">${m.physicalAmount.toLocaleString("es-CL")}</td>
-                                <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">${m.onlineAmount.toLocaleString("es-CL")}</td>
+                                <td className="p-3 pl-5 font-black text-gray-900 dark:text-white">{m?.fullMonthLabel || ""}</td>
+                                <td className="p-3 text-right font-black text-gray-950 dark:text-white">${totAmt.toLocaleString("es-CL")}</td>
+                                <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">${phyAmt.toLocaleString("es-CL")}</td>
+                                <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">${onlAmt.toLocaleString("es-CL")}</td>
                                 <td className="p-3 text-right font-bold text-gray-500">{rowPctOnline}%</td>
-                                <td className="p-3 text-right pr-5 font-bold">{m.totalUnits} pares</td>
+                                <td className="p-3 text-right pr-5 font-bold">{totUnits} pares</td>
                               </tr>
                             );
                           })}

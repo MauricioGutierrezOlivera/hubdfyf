@@ -1035,10 +1035,23 @@ export class SalesService {
           lte: endDate,
         },
       },
-      include: {
+      select: {
+        id: true,
+        date: true,
+        vendedor: true,
+        channel: true,
+        notes: true,
         items: {
-          include: {
-            product: true,
+          select: {
+            price: true,
+            discount: true,
+            quantity: true,
+            product: {
+              select: {
+                name: true,
+                compareAtPrice: true,
+              },
+            },
           },
         },
       },
@@ -1097,19 +1110,21 @@ export class SalesService {
         for (const item of sale.items) {
           const isProductSock = isSock(item.product?.name || '');
           const prodCompareAt = item.product?.compareAtPrice || 0;
-          let originalPrice = item.price;
-          let discountVal = item.discount || 0;
+          const rawPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : 0;
+          let discountVal = typeof item.discount === 'number' && !isNaN(item.discount) ? item.discount : 0;
+          const qty = typeof item.quantity === 'number' && !isNaN(item.quantity) ? item.quantity : 1;
+          let originalPrice = rawPrice;
 
-          if (prodCompareAt > item.price && discountVal === 0) {
+          if (prodCompareAt > rawPrice && discountVal === 0) {
             originalPrice = prodCompareAt;
-            discountVal = Math.round(((prodCompareAt - item.price) / prodCompareAt) * 100);
+            discountVal = Math.round(((prodCompareAt - rawPrice) / prodCompareAt) * 100);
           }
           const isPercent = discountVal > 0 && discountVal <= 100;
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
             : discountVal;
-          const salePrice = originalPrice - discountAmount;
-          const itemNetPrice = salePrice * item.quantity;
+          const salePrice = Math.max(0, originalPrice - discountAmount);
+          const itemNetPrice = isNaN(salePrice * qty) ? 0 : Math.round(salePrice * qty);
 
           let eventType = 'Venta';
           const normVendedor = (sale.vendedor || '').toLowerCase();
@@ -1119,7 +1134,7 @@ export class SalesService {
             eventType = 'Cambio Sale';
           } else if (normVendedor === 'regalo') {
             eventType = 'Regalo';
-          } else if (item.quantity < 0) {
+          } else if (qty < 0) {
             eventType = isExchange ? 'Cambio Entra' : 'Devolución';
           } else {
             if (isExchange) {
@@ -1137,11 +1152,11 @@ export class SalesService {
           }
 
           if (!isProductSock && eventType === 'Venta') {
-            mTotalUnits += item.quantity;
+            mTotalUnits += qty;
             if (isOnlineSale) {
-              mOnlineUnits += item.quantity;
+              mOnlineUnits += qty;
             } else {
-              mPhysicalUnits += item.quantity;
+              mPhysicalUnits += qty;
             }
           }
         }

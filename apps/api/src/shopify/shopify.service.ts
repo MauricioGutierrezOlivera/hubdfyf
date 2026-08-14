@@ -51,15 +51,6 @@ export class ShopifyService implements OnModuleInit {
     } else {
       this.logger.log(`Shopify configured for store: ${this.shopUrl}`);
       this.logger.log('Using Client Credentials Grant for authentication');
-      // Trigger background catalog sync & online order sync on startup
-      setTimeout(() => {
-        this.syncCatalogFromShopify().catch((err) => {
-          this.logger.error(`Initial Shopify catalog sync failed: ${err}`);
-        });
-        this.syncOrdersFromShopify().catch((err) => {
-          this.logger.error(`Initial Shopify order sync failed: ${err}`);
-        });
-      }, 5000);
     }
   }
 
@@ -767,6 +758,7 @@ export class ShopifyService implements OnModuleInit {
         if (res.created) {
           createdCount++;
         }
+        await new Promise((r) => setTimeout(r, 30));
       }
 
       this.logger.log(

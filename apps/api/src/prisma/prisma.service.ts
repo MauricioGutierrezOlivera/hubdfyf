@@ -9,7 +9,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   constructor() {
     let connectionString = process.env.DATABASE_URL!;
-    if (connectionString.startsWith('prisma+postgres://')) {
+    if (connectionString && connectionString.startsWith('prisma+postgres://')) {
       try {
         const urlObj = new URL(connectionString);
         const apiKey = urlObj.searchParams.get('api_key');
@@ -25,9 +25,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
     }
 
-    const pool = new Pool({ connectionString });
-    const adapter = new PrismaPg(pool);
+    const pool = new Pool({
+      connectionString,
+      max: 15,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
+    });
 
+    pool.on('error', (err) => {
+      console.error('Idle PostgreSQL pool client warning:', err.message);
+    });
+
+    const adapter = new PrismaPg(pool);
     super({ adapter });
     this.pool = pool;
   }
