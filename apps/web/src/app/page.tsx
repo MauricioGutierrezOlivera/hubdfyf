@@ -70,6 +70,8 @@ export default function AppContainer() {
   const [activeStore, setActiveStore] = useState<Store | null>(null);
   const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock">("pos");
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
   // Login States
   const [loginEmail, setLoginEmail] = useState("");
@@ -1527,15 +1529,31 @@ export default function AppContainer() {
   return (
     <div className={`flex h-screen overflow-hidden ${isDarkMode ? "dark" : ""} bg-[#F9FAFB] dark:bg-[#022c20] text-gray-900 dark:text-white transition-colors duration-200`}>
       
-      {/* Sidebar Navigation */}
-      <aside className="w-64 bg-white dark:bg-[#033b2b] border-r border-gray-200 dark:border-[#055740] flex flex-col z-10 transition-colors duration-200">
-        <div className="p-6 border-b border-gray-200 dark:border-[#055740] flex items-center justify-center">
+      {/* Mobile Drawer Overlay Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden" 
+          onClick={() => setIsMobileMenuOpen(false)} 
+        />
+      )}
+
+      {/* Sidebar Navigation (Desktop Fixed / Mobile Slide-over Drawer) */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#033b2b] border-r border-gray-200 dark:border-[#055740] flex flex-col transition-transform duration-300 transform md:relative md:translate-x-0 ${
+        isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      }`}>
+        <div className="p-6 border-b border-gray-200 dark:border-[#055740] flex items-center justify-between">
           <Image src="/logo.png" alt="DFYF Logo" width={140} height={140} className="object-contain" priority />
+          <button 
+            onClick={() => setIsMobileMenuOpen(false)} 
+            className="md:hidden text-gray-500 hover:text-gray-900 dark:hover:text-white text-xl font-black p-1 cursor-pointer"
+          >
+            ✕
+          </button>
         </div>
         
-        <nav className="flex-1 px-4 py-6 space-y-1.5 font-bold">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 font-bold overflow-y-auto">
           <button 
-            onClick={() => setActiveTab("pos")}
+            onClick={() => { setActiveTab("pos"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
               activeTab === "pos" 
                 ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1546,7 +1564,7 @@ export default function AppContainer() {
           </button>
           
           <button 
-            onClick={() => setActiveTab("returns")}
+            onClick={() => { setActiveTab("returns"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
               activeTab === "returns" 
                 ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1557,7 +1575,7 @@ export default function AppContainer() {
           </button>
 
           <button 
-            onClick={() => setActiveTab("customers")}
+            onClick={() => { setActiveTab("customers"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
               activeTab === "customers" 
                 ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1568,7 +1586,7 @@ export default function AppContainer() {
           </button>
 
           <button 
-            onClick={() => setActiveTab("reports")}
+            onClick={() => { setActiveTab("reports"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
               activeTab === "reports" 
                 ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1581,7 +1599,7 @@ export default function AppContainer() {
           {currentUser.role !== "CLERK" && (
             <>
               <button 
-                onClick={() => setActiveTab("analytics")}
+                onClick={() => { setActiveTab("analytics"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   activeTab === "analytics" 
                     ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1592,7 +1610,7 @@ export default function AppContainer() {
               </button>
 
               <button 
-                onClick={() => setActiveTab("styles")}
+                onClick={() => { setActiveTab("styles"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   activeTab === "styles" 
                     ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1603,7 +1621,7 @@ export default function AppContainer() {
               </button>
 
               <button 
-                onClick={() => setActiveTab("stock")}
+                onClick={() => { setActiveTab("stock"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   activeTab === "stock" 
                     ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1620,7 +1638,7 @@ export default function AppContainer() {
         <div className="p-4 border-t border-gray-200 dark:border-[#055740]">
           {(currentUser.role === "SUPER_ADMIN" || currentUser.role === "COUNTRY_ADMIN") ? (
             <button 
-              onClick={() => setActiveTab("admin")}
+              onClick={() => { setActiveTab("admin"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
                 activeTab === "admin" 
                   ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
@@ -1638,13 +1656,20 @@ export default function AppContainer() {
       </aside>
 
       {/* Main Panel */}
-      <main className="flex-1 flex flex-col bg-[#F9FAFB] dark:bg-[#022c20] transition-colors duration-200 overflow-hidden">
+      <main className="flex-1 flex flex-col bg-[#F9FAFB] dark:bg-[#022c20] transition-colors duration-200 overflow-hidden relative">
         {/* Header */}
-        <header className="h-16 bg-white dark:bg-[#033b2b] border-b border-gray-200 dark:border-[#055740] flex items-center justify-between px-6 z-10 transition-colors duration-200">
-          <div className="flex-1 max-w-xl">
-             <div className="text-gray-500 dark:text-gray-400 text-sm font-bold flex items-center gap-2">
-               <span>Tienda Activa:</span> 
-               <span className="bg-dfyf-green/10 text-dfyf-green px-2.5 py-0.5 rounded-full text-xs font-black">{activeStore.name}</span>
+        <header className="h-16 bg-white dark:bg-[#033b2b] border-b border-gray-200 dark:border-[#055740] flex items-center justify-between px-4 sm:px-6 z-10 transition-colors duration-200">
+          <div className="flex items-center gap-3 flex-1 max-w-xl">
+             <button 
+               onClick={() => setIsMobileMenuOpen(true)}
+               className="md:hidden p-2 rounded-xl bg-gray-100 dark:bg-[#044c38] text-gray-700 dark:text-gray-200 font-bold cursor-pointer text-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-[#055740] transition-colors"
+               aria-label="Abrir Menú"
+             >
+               ☰
+             </button>
+             <div className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2">
+               <span className="hidden sm:inline">Tienda:</span> 
+               <span className="bg-dfyf-green/10 text-dfyf-green px-2.5 py-0.5 rounded-full text-xs font-black truncate max-w-[130px] sm:max-w-none">{activeStore.name}</span>
                {currentUser.stores.length > 1 && (
                  <button 
                    onClick={() => {
@@ -1659,24 +1684,24 @@ export default function AppContainer() {
              </div>
           </div>
 
-          <div className="flex items-center gap-4 ml-6">
+          <div className="flex items-center gap-2 sm:gap-4 ml-2 sm:ml-6">
             <button 
               onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-[#044c38] hover:bg-gray-200 dark:hover:bg-[#055740] transition-colors border border-gray-200 dark:border-[#055740] text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm font-bold shadow-sm cursor-pointer"
+              className="p-2 rounded-lg bg-gray-100 dark:bg-[#044c38] hover:bg-gray-200 dark:hover:bg-[#055740] transition-colors border border-gray-200 dark:border-[#055740] text-gray-700 dark:text-gray-200 flex items-center gap-1.5 text-xs sm:text-sm font-bold shadow-sm cursor-pointer"
             >
-              {isDarkMode ? '☀️ Claro' : '🌙 Oscuro'}
+              {isDarkMode ? '☀️' : '🌙'} <span className="hidden sm:inline">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
             </button>
 
             {/* Characteristic User Profile Pill & Dropdown Menu */}
-            <div className="relative border-l border-gray-200 dark:border-[#055740] pl-4">
+            <div className="relative border-l border-gray-200 dark:border-[#055740] pl-2 sm:pl-4">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-3 p-1.5 px-3 rounded-2xl hover:bg-gray-100 dark:hover:bg-[#044c38] transition-all border border-transparent hover:border-gray-200 dark:hover:border-[#055740] cursor-pointer group"
+                className="flex items-center gap-2 sm:gap-3 p-1 sm:px-3 rounded-2xl hover:bg-gray-100 dark:hover:bg-[#044c38] transition-all border border-transparent hover:border-gray-200 dark:hover:border-[#055740] cursor-pointer group"
               >
-                <div className="w-8 h-8 rounded-full bg-dfyf-green flex items-center justify-center text-white font-black shadow-sm group-hover:scale-105 transition-transform">
+                <div className="w-8 h-8 rounded-full bg-dfyf-green flex items-center justify-center text-white font-black shadow-sm group-hover:scale-105 transition-transform text-sm">
                   {currentUser.name.charAt(0)}
                 </div>
-                <div className="flex flex-col text-left">
+                <div className="hidden sm:flex flex-col text-left">
                    <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1">
                      {currentUser.name}
                      <span className="text-[10px] opacity-60">▼</span>
@@ -1718,23 +1743,22 @@ export default function AppContainer() {
         </header>
 
         {/* Dashboard Pages */}
-        <div className="flex-1 p-6 overflow-hidden">
+        <div className="flex-1 p-3 sm:p-6 overflow-hidden pb-16 md:pb-6">
           
           {/* TAB 1: POS Screen */}
           {activeTab === "pos" && (
-            <div className="flex gap-6 h-full overflow-hidden">
+            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full overflow-hidden relative">
               <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-                <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-black">Registrar Venta</h1>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h1 className="text-xl sm:text-2xl font-black">Registrar Venta</h1>
                   <input 
                     type="text" 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Buscar calzado por modelo..." 
-                    className="w-72 px-4 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:border-dfyf-green shadow-sm"
+                    className="w-full sm:w-72 px-4 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:border-dfyf-green shadow-sm font-bold"
                   />
                 </div>
-
 
                 {isLoadingCatalog ? (
                   <div className="flex-1 flex items-center justify-center text-sm font-bold text-gray-400">
@@ -1745,60 +1769,61 @@ export default function AppContainer() {
                     No se encontraron productos en el inventario.
                   </div>
                 ) : (
-                  <div className="flex-1 overflow-y-auto space-y-3 pb-4 pr-2">
+                  <div className="flex-1 overflow-y-auto space-y-3 pb-20 lg:pb-4 pr-1 sm:pr-2">
                     {filteredCatalog.map((product, idx) => (
                       <div 
                         key={idx} 
-                        className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl p-4 flex items-center gap-5 shadow-sm hover:shadow-md hover:border-dfyf-green/45 transition-all group"
+                        className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 shadow-sm hover:shadow-md hover:border-dfyf-green/45 transition-all group"
                       >
-                        {/* Shoe image from Shopify or fallback emoji */}
-                        <div className="w-20 h-20 bg-[#F9FAFB] dark:bg-[#022c20] rounded-xl overflow-hidden flex items-center justify-center border border-gray-100 dark:border-[#055740]/30 flex-shrink-0 relative group-hover:scale-102 transition-transform">
-                          {product.imageUrl ? (
-                            <img 
-                              src={product.imageUrl} 
-                              alt={product.name} 
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                // If image fails to load, clear it to fallback to the emoji
-                                (e.target as HTMLImageElement).src = "";
-                                (e.target as HTMLImageElement).onerror = null;
-                              }}
-                            />
-                          ) : (
-                            <span className="text-3xl select-none">👞</span>
-                          )}
-                        </div>
+                        <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
+                          {/* Shoe image from Shopify or fallback emoji */}
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#F9FAFB] dark:bg-[#022c20] rounded-xl overflow-hidden flex items-center justify-center border border-gray-100 dark:border-[#055740]/30 flex-shrink-0 relative group-hover:scale-102 transition-transform">
+                            {product.imageUrl ? (
+                              <img 
+                                src={product.imageUrl} 
+                                alt={product.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "";
+                                  (e.target as HTMLImageElement).onerror = null;
+                                }}
+                              />
+                            ) : (
+                              <span className="text-2xl sm:text-3xl select-none">👞</span>
+                            )}
+                          </div>
 
-                        {/* Model details (Name & Price) */}
-                        <div className="flex-1">
-                          <h3 className="font-bold text-gray-950 dark:text-white text-md leading-snug group-hover:text-dfyf-green transition-colors">
-                            {product.name}
-                          </h3>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {product.compareAtPrice && product.compareAtPrice > product.price ? (
-                              <>
-                                <span className="text-xs text-gray-400 dark:text-gray-400 line-through font-semibold">
-                                  ${product.compareAtPrice.toLocaleString("es-CL")}
-                                </span>
-                                <span className="text-dfyf-green dark:text-green-400 font-black text-md">
+                          {/* Model details (Name & Price) */}
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-950 dark:text-white text-sm sm:text-md leading-snug group-hover:text-dfyf-green transition-colors">
+                              {product.name}
+                            </h3>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {product.compareAtPrice && product.compareAtPrice > product.price ? (
+                                <>
+                                  <span className="text-xs text-gray-400 dark:text-gray-400 line-through font-semibold">
+                                    ${product.compareAtPrice.toLocaleString("es-CL")}
+                                  </span>
+                                  <span className="text-dfyf-green dark:text-green-400 font-black text-sm sm:text-md">
+                                    ${product.price.toLocaleString("es-CL")}
+                                  </span>
+                                  <span className="text-[10px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                                    (-{Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)}%)
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-dfyf-green dark:text-green-400 font-black text-sm sm:text-md">
                                   ${product.price.toLocaleString("es-CL")}
                                 </span>
-                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-800/50">
-                                  (-{Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)}%)
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-dfyf-green dark:text-green-400 font-black text-md">
-                                ${product.price.toLocaleString("es-CL")}
-                              </span>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         {/* Sizes & Stock Selector */}
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0 max-w-sm sm:max-w-md">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TALLAS (DISPONIBLES)</span>
-                          <div className="flex gap-1.5 flex-wrap justify-end">
+                        <div className="w-full sm:w-auto flex flex-col items-start sm:items-end gap-1 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-[#055740]/40">
+                          <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">TALLAS (DISPONIBLES)</span>
+                          <div className="flex gap-1.5 flex-wrap justify-start sm:justify-end w-full sm:w-auto">
                             {product.variants.map((variant) => (
                               <button
                                 key={variant.id}
@@ -1822,8 +1847,8 @@ export default function AppContainer() {
                 )}
               </div>
 
-              {/* POS Cart Sidebar */}
-              <div className="w-[420px] bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl flex flex-col shadow-sm overflow-hidden">
+              {/* POS Cart Sidebar (Desktop fixed right panel) */}
+              <div className="hidden lg:flex w-[420px] bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl flex-col shadow-sm overflow-hidden flex-shrink-0">
                 <div className="px-5 py-3 border-b border-gray-100 dark:border-[#055740] bg-gray-50/50 dark:bg-[#022c20]/20">
                   <h3 className="text-sm font-black text-gray-800 dark:text-gray-200">Carrito de Compra</h3>
                 </div>
@@ -2118,6 +2143,149 @@ export default function AppContainer() {
                   </div>
                 </div>
               )}
+
+              {/* Floating Mobile Cart Bar (Visible on mobile when cart has items) */}
+              {cart.length > 0 && (
+                <div 
+                  onClick={() => setIsMobileCartOpen(true)}
+                  className="lg:hidden fixed bottom-18 left-3 right-3 z-30 bg-dfyf-green text-white p-3.5 rounded-2xl shadow-2xl flex items-center justify-between font-bold cursor-pointer border border-white/20 active:scale-95 transition-transform"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-white text-dfyf-green rounded-full flex items-center justify-center text-xs font-black shadow-sm">
+                      {cart.reduce((acc, i) => acc + i.quantity, 0)}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black">Ver Carrito</span>
+                      <span className="text-[10px] text-white/80">{cart.length} {cart.length === 1 ? "producto" : "productos"}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-black">${total.toLocaleString("es-CL")}</span>
+                    <span className="text-sm">→</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Mobile Cart Bottom Sheet Drawer */}
+              {isMobileCartOpen && (
+                <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
+                  <div className="fixed inset-0" onClick={() => setIsMobileCartOpen(false)} />
+                  <div className="relative w-full h-[90vh] bg-white dark:bg-[#033b2b] rounded-t-3xl shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-bottom duration-300">
+                    {/* Header */}
+                    <div className="p-4 border-b border-gray-200 dark:border-[#055740] flex items-center justify-between bg-gray-50 dark:bg-[#022c20]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🛒</span>
+                        <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white">
+                          Carrito de Venta ({cart.reduce((acc, i) => acc + i.quantity, 0)})
+                        </h3>
+                      </div>
+                      <button 
+                        onClick={() => setIsMobileCartOpen(false)}
+                        className="px-3 py-1 bg-gray-200 dark:bg-[#044c38] text-gray-700 dark:text-gray-200 rounded-xl font-black text-xs cursor-pointer"
+                      >
+                        ✕ Cerrar
+                      </button>
+                    </div>
+
+                    {/* Cart Items List */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                      {cart.length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm font-bold uppercase tracking-wider">
+                          Carrito Vacío
+                        </div>
+                      ) : (
+                        cart.map((item) => (
+                          <div key={item.productId} className="flex gap-3 bg-[#F9FAFB] dark:bg-[#044c38] border border-gray-100 dark:border-[#055740] py-2 px-3 rounded-xl shadow-sm">
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <p className="font-bold text-xs text-gray-900 dark:text-white leading-tight">{item.productName}</p>
+                                <button onClick={() => updateCartQuantity(item.productId, -item.quantity)} className="text-gray-400 hover:text-red-500 transition-colors text-xs ml-2">✕</button>
+                              </div>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mt-0.5">
+                                Talla: {item.size} {item.quantity > 1 ? `(x${item.quantity})` : ""}
+                              </p>
+                              <p className="text-xs font-black text-dfyf-green dark:text-green-400 mt-1">
+                                ${((item.price - (item.discount || 0)) * item.quantity).toLocaleString("es-CL")}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end justify-between">
+                              <div className="flex items-center gap-1.5 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg p-0.5">
+                                <button onClick={() => updateCartQuantity(item.productId, -1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300">-</button>
+                                <span className="text-xs font-black px-1">{item.quantity}</span>
+                                <button onClick={() => updateCartQuantity(item.productId, 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300">+</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Payment & Checkout Form Footer inside Drawer */}
+                    <div className="p-4 bg-[#F9FAFB] dark:bg-[#022c20] border-t border-gray-200 dark:border-[#055740] space-y-3">
+                      {/* Customer CRM identification */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Identificar Cliente (CRM)</label>
+                        {identifiedCustomer ? (
+                          <div className="flex items-center justify-between bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg p-2.5 shadow-sm">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight">{identifiedCustomer.name}</span>
+                              <span className="text-[10px] text-gray-400 mt-0.5">{identifiedCustomer.rut || identifiedCustomer.email}</span>
+                            </div>
+                            <button onClick={() => setIdentifiedCustomer(null)} className="text-xs text-red-500 font-bold hover:underline cursor-pointer">Quitar</button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1.5 h-9 items-center">
+                            <input 
+                              type="text" 
+                              placeholder="RUT / Email / Nombre"
+                              value={searchCustomerQuery}
+                              onChange={(e) => setSearchCustomerQuery(e.target.value)}
+                              className="flex-1 h-full px-3 border border-gray-200 dark:border-[#055740] rounded-lg bg-white dark:bg-[#033b2b] text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                            />
+                            <button onClick={handleSearchCustomer} className="px-3 h-full bg-dfyf-green text-white font-bold rounded-lg text-xs hover:bg-[#046c4e] transition-all cursor-pointer">
+                              Buscar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Payment Method Select */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Medio de Pago</label>
+                          <select 
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full border border-gray-200 dark:border-[#055740] rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-9"
+                          >
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA_DEBITO">Débito</option>
+                            <option value="TARJETA_CREDITO">Crédito</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Total Venta</label>
+                          <div className="h-9 flex items-center justify-end px-3 bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-lg font-black text-sm text-dfyf-green dark:text-green-400">
+                            ${total.toLocaleString("es-CL")}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          setIsMobileCartOpen(false);
+                          handleRegisterSale();
+                        }}
+                        disabled={isRegisteringSale || cart.length === 0 || currentUser?.role === "VISITOR"}
+                        className="w-full font-bold py-3 bg-dfyf-green hover:bg-[#046c4e] text-white rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer text-sm"
+                      >
+                        {isRegisteringSale ? "Registrando..." : "Confirmar Venta Móvil"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2233,12 +2401,53 @@ export default function AppContainer() {
                               </div>
                               <div className="space-y-2.5">
                                 {sale.items.map((item: any) => {
-                                  const paid = item.price - (item.discount || 0);
+                                  const price = item.price || 0;
+                                  const discountVal = item.discount || 0;
+                                  let itemDiscountAmt = 0;
+                                  let discountLabel = "";
+                                  
+                                  if (discountVal > 0) {
+                                    if (discountVal <= 100) {
+                                      itemDiscountAmt = Math.round(price * (discountVal / 100));
+                                      discountLabel = `Desc. ${discountVal}%`;
+                                    } else {
+                                      itemDiscountAmt = discountVal;
+                                      discountLabel = `Desc. $${discountVal.toLocaleString("es-CL")}`;
+                                    }
+                                  }
+
+                                  let paid = Math.max(0, price - itemDiscountAmt);
+
+                                  // Proportional General Sale Discount Adjustment
+                                  if (sale && sale.total && sale.total > 0 && Array.isArray(sale.items) && sale.items.length > 0) {
+                                    const totalItemsNetSum = sale.items.reduce((acc: number, it: any) => {
+                                      const p = it.price || 0;
+                                      const d = it.discount || 0;
+                                      const dAmt = d > 0 ? (d <= 100 ? Math.round(p * (d / 100)) : d) : 0;
+                                      return acc + Math.max(0, p - dAmt) * Math.abs(it.quantity || 1);
+                                    }, 0);
+
+                                    if (totalItemsNetSum > 0 && sale.total < totalItemsNetSum) {
+                                      const ratio = sale.total / totalItemsNetSum;
+                                      paid = Math.round(paid * ratio);
+                                      if (!discountLabel) {
+                                        discountLabel = `Desc. General (${Math.round((1 - ratio) * 100)}%)`;
+                                      }
+                                    }
+                                  }
+
                                   return (
-                                    <div key={item.id} className="flex justify-between items-center text-sm font-bold bg-gray-50 dark:bg-white/5 p-2 rounded-xl">
+                                    <div key={item.id} className="flex justify-between items-center text-sm font-bold bg-gray-50 dark:bg-white/5 p-2.5 rounded-xl border border-gray-100 dark:border-[#055740]/20">
                                       <div>
                                         <p className="text-gray-950 dark:text-white">{item.product.name}</p>
-                                        <p className="text-xs text-gray-400 font-medium">Talla: {item.product.size} | Pagó: ${paid.toLocaleString("es-CL")}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                                          Talla: {item.product.size} | Pagó: <strong className="text-dfyf-green dark:text-green-400 font-black">${paid.toLocaleString("es-CL")}</strong>
+                                          {discountLabel && (
+                                            <span className="ml-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                              ({discountLabel})
+                                            </span>
+                                          )}
+                                        </p>
                                       </div>
                                       {item.quantity > 0 && (
                                         <button
@@ -2254,7 +2463,7 @@ export default function AppContainer() {
                                               saleDate: sale.date,
                                             });
                                           }}
-                                          className="px-3 py-1.5 bg-dfyf-green hover:bg-[#046c4e] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                                          className="px-3.5 py-1.5 bg-dfyf-green hover:bg-[#046c4e] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
                                         >
                                           Seleccionar
                                         </button>
@@ -6003,6 +6212,73 @@ export default function AppContainer() {
         )}
 
         </div>
+
+        {/* Mobile Fixed Bottom Navigation Bar */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-[#033b2b] border-t border-gray-200 dark:border-[#055740] flex justify-around items-center h-16 px-1 shadow-lg">
+          <button
+            onClick={() => { setActiveTab("pos"); setIsMobileCartOpen(false); }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+              activeTab === "pos" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            <span className="text-lg leading-none mb-1">🛒</span>
+            <span>POS</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("returns"); setIsMobileCartOpen(false); }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+              activeTab === "returns" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            <span className="text-lg leading-none mb-1">🔄</span>
+            <span>Cambios</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("customers"); setIsMobileCartOpen(false); }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+              activeTab === "customers" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            <span className="text-lg leading-none mb-1">👥</span>
+            <span>Clientes</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("reports"); setIsMobileCartOpen(false); }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+              activeTab === "reports" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            <span className="text-lg leading-none mb-1">📊</span>
+            <span>Reportes</span>
+          </button>
+
+          {currentUser?.role !== "CLERK" && (
+            <button
+              onClick={() => { setActiveTab("analytics"); setIsMobileCartOpen(false); }}
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+                activeTab === "analytics" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <span className="text-lg leading-none mb-1">📈</span>
+              <span>Análisis</span>
+            </button>
+          )}
+
+          {(currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "COUNTRY_ADMIN") && (
+            <button
+              onClick={() => { setActiveTab("admin"); setIsMobileCartOpen(false); }}
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition-colors ${
+                activeTab === "admin" ? "text-dfyf-green font-black" : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <span className="text-lg leading-none mb-1">⚙️</span>
+              <span>Admin</span>
+            </button>
+          )}
+        </nav>
       </main>
 
       {/* MODAL 1: SELECT MULTIPLE CUSTOMER RESULTS */}

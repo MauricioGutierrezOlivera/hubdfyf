@@ -15,11 +15,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DFYF Gestor de Ventas",
   description: "Sistema de Gestión y POS DFYF",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "DFYF POS",
+  },
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
   },
+};
+
+export const viewport = {
+  themeColor: "#055740",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

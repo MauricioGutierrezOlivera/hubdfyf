@@ -1,0 +1,18 @@
+{
+  "name": "DFYF POS — Gestor de Ventas",
+  "short_name": "DFYF POS",
+  "description": "Sistema de Ventas y Gestión de Inventario para DFYF",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#022c20",
+  "theme_color": "#055740",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "516x516",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
