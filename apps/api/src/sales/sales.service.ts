@@ -724,7 +724,7 @@ export class SalesService {
           size: item.product?.size || 'UN',
           originalPrice,
           salePrice,
-          discount: discountAmount * item.quantity,
+          discount: Math.abs(discountAmount * item.quantity),
           vendedor: sale.vendedor || 'ONLINE',
           isSock: isProductSock,
           quantity: item.quantity,

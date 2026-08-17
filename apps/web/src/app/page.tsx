@@ -4036,11 +4036,17 @@ export default function AppContainer() {
                                 <td className="p-3.5 text-right font-bold text-gray-400">${item.originalPrice.toLocaleString("es-CL")}</td>
                                 <td className="p-3.5 text-right font-black text-gray-900 dark:text-white">${item.salePrice.toLocaleString("es-CL")}</td>
                                 <td className="p-3.5 text-right font-bold text-red-500">
-                                  {item.discount > 0 ? (() => {
-                                    const discountVal = item.originalPrice - item.salePrice;
-                                    const pct = item.originalPrice > 0 ? Math.round((discountVal / item.originalPrice) * 100) : 0;
-                                    return `-$${item.discount.toLocaleString("es-CL")} (${pct}%)`;
-                                  })() : "-"}
+                                  {(() => {
+                                    const absDiscount = Math.abs(item.discount || 0);
+                                    const priceDiff = item.originalPrice > item.salePrice ? (item.originalPrice - item.salePrice) : 0;
+                                    const effectiveDiscount = absDiscount > 0 ? absDiscount : priceDiff;
+                                    
+                                    if (effectiveDiscount > 0 && item.originalPrice > 0) {
+                                      const pct = Math.round((effectiveDiscount / item.originalPrice) * 100);
+                                      return `-$${effectiveDiscount.toLocaleString("es-CL")} (${pct}%)`;
+                                    }
+                                    return "-";
+                                  })()}
                                 </td>
                                 <td className="p-3.5 pr-5">
                                   {(() => {
