@@ -476,6 +476,10 @@ export class SalesService {
       throw new NotFoundException('La tienda especificada no existe.');
     }
 
+    const isGiftPayment = (data.paymentMethod || '').toUpperCase() === 'REGALO';
+    const finalVendedor = isGiftPayment ? 'REGALO' : data.vendedor;
+    const finalNotes = isGiftPayment ? (data.notes ? (data.notes.includes('REGALO') ? data.notes : `REGALO - ${data.notes}`) : 'REGALO') : data.notes;
+
     const shopifyAdjustments: { shopifyVariantId: string; quantity: number }[] = [];
 
     // Start Transaction
@@ -524,7 +528,7 @@ export class SalesService {
         });
 
         // Accumulate total
-        const itemDiscount = item.discount || 0;
+        const itemDiscount = isGiftPayment ? item.price : (item.discount || 0);
         const itemTotal = (item.price - itemDiscount) * item.quantity;
         totalAmount += itemTotal;
 
@@ -548,15 +552,15 @@ export class SalesService {
       return tx.sale.create({
         data: {
           storeId,
-          userId,
+          userId: isGiftPayment ? null : userId,
           customerId: data.customerId || null,
           type: data.type,
-          total: totalAmount,
-          notes: data.notes,
-          vendedor: data.vendedor,
+          total: isGiftPayment ? 0 : totalAmount,
+          notes: finalNotes,
+          vendedor: finalVendedor,
           channel: data.channel,
           paymentMethod: data.paymentMethod,
-          paymentBank: data.paymentBank,
+          paymentBank: isGiftPayment ? null : data.paymentBank,
           items: {
             create: saleItemsToCreate,
           },
@@ -663,7 +667,10 @@ export class SalesService {
       const hasNegative = sale.items.some(it => it.quantity < 0);
       const isExchange = hasPositive && hasNegative;
 
-      const isGiftSale = sale.notes?.toLowerCase().includes('regalo');
+      const isGiftSale = 
+        sale.notes?.toLowerCase().includes('regalo') ||
+        (sale.vendedor || '').toUpperCase() === 'REGALO' ||
+        (sale.paymentMethod || '').toUpperCase() === 'REGALO';
 
       for (const item of sale.items) {
         const isProductSock = isSock(item.product?.name || '');
@@ -687,18 +694,20 @@ export class SalesService {
         // Determine event type
         let eventType = 'Venta';
         const normVendedor = (sale.vendedor || '').toLowerCase();
-        if (normVendedor === 'cambio entra') {
+        const normPaymentMethod = (sale.paymentMethod || '').toLowerCase();
+
+        if (normVendedor === 'regalo' || normPaymentMethod === 'regalo') {
+          eventType = 'Regalo';
+        } else if (normVendedor === 'cambio entra') {
           eventType = 'Cambio Entra';
         } else if (normVendedor === 'cambio sale') {
           eventType = 'Cambio Sale';
-        } else if (normVendedor === 'regalo') {
-          eventType = 'Regalo';
         } else if (item.quantity < 0) {
           eventType = isExchange ? 'Cambio Entra' : 'Devolución';
         } else {
           if (isExchange) {
             eventType = 'Cambio Sale';
-          } else if (isGiftSale || salePrice === 0 || discountVal === 100) {
+          } else if (isGiftSale || salePrice === 0 || discountVal === 100 || discountVal >= originalPrice) {
             eventType = 'Regalo';
           }
         }

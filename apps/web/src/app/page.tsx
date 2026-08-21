@@ -1113,7 +1113,9 @@ export default function AppContainer() {
     setSaleErrorMessage("");
 
     try {
-      const actualGeneralDiscount = getActualGeneralDiscount();
+      const isGiftPayment = paymentMethod === "REGALO";
+      const vendedorFinal = isGiftPayment ? "REGALO" : (currentUser?.name || "Vendedor");
+
       const res = await fetch(`${API_BASE_URL}/admin/sales`, {
         method: "POST",
         headers: {
@@ -1124,16 +1126,24 @@ export default function AppContainer() {
         body: JSON.stringify({
           customerId: identifiedCustomer?.id || null,
           type: "NORMAL",
-          notes: saleNotes,
-          vendedor: currentUser?.name || "Vendedor",
+          notes: isGiftPayment ? (saleNotes ? (saleNotes.includes("REGALO") ? saleNotes : `REGALO - ${saleNotes}`) : "REGALO") : saleNotes,
+          vendedor: vendedorFinal,
           channel: "OFFLINE",
           paymentMethod,
-          paymentBank,
+          paymentBank: isGiftPayment ? "" : paymentBank,
           items: (() => {
             const totalGeneralDiscount = actualGeneralDiscount;
             const subtotalBase = cart.reduce((sum, item) => sum + (item.price * Math.abs(item.quantity)), 0);
             
             return cart.map((item) => {
+              if (isGiftPayment) {
+                return {
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  price: item.price,
+                  discount: item.price,
+                };
+              }
               const itemDiscount = getActualItemDiscount(item);
               let generalDiscountShare = 0;
               if (totalGeneralDiscount > 0 && subtotalBase > 0) {
@@ -1327,7 +1337,7 @@ export default function AppContainer() {
   const subtotal = cart.reduce((sum, item) => sum + item.price * Math.abs(item.quantity), 0);
   const productDiscounts = cart.reduce((sum, item) => sum + getActualItemDiscount(item) * Math.abs(item.quantity), 0);
   const actualGeneralDiscount = getActualGeneralDiscount();
-  const total = Math.max(0, subtotal - productDiscounts - actualGeneralDiscount);
+  const total = paymentMethod === "REGALO" ? 0 : Math.max(0, subtotal - productDiscounts - actualGeneralDiscount);
 
   // Filter catalog
   const filteredCatalog = catalog.filter((product) => {
@@ -1976,6 +1986,7 @@ export default function AppContainer() {
                         <option value="TARJETA_DEBITO">Débito</option>
                         <option value="TARJETA_CREDITO">Crédito</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
+                        <option value="REGALO">REGALO</option>
                       </select>
                     </div>
 
@@ -2050,17 +2061,26 @@ export default function AppContainer() {
                       <span>Subtotal</span>
                       <span>${subtotal.toLocaleString("es-CL")}</span>
                     </div>
-                    {productDiscounts > 0 && (
+                    {paymentMethod === "REGALO" ? (
                       <div className="flex justify-between text-xs text-red-500 font-bold">
-                        <span>Descuentos Prod.</span>
-                        <span>-${productDiscounts.toLocaleString("es-CL")}</span>
+                        <span>Descuento Regalo (100%)</span>
+                        <span>-${subtotal.toLocaleString("es-CL")}</span>
                       </div>
-                    )}
-                    {actualGeneralDiscount > 0 && (
-                      <div className="flex justify-between text-xs text-red-500 font-bold">
-                        <span>Descuento Gral. {generalDiscountType === "percent" ? `(${discountAmount}%)` : ""}</span>
-                        <span>-${actualGeneralDiscount.toLocaleString("es-CL")}</span>
-                      </div>
+                    ) : (
+                      <>
+                        {productDiscounts > 0 && (
+                          <div className="flex justify-between text-xs text-red-500 font-bold">
+                            <span>Descuentos Prod.</span>
+                            <span>-${productDiscounts.toLocaleString("es-CL")}</span>
+                          </div>
+                        )}
+                        {actualGeneralDiscount > 0 && (
+                          <div className="flex justify-between text-xs text-red-500 font-bold">
+                            <span>Descuento Gral. {generalDiscountType === "percent" ? `(${discountAmount}%)` : ""}</span>
+                            <span>-${actualGeneralDiscount.toLocaleString("es-CL")}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                     <div className="flex justify-between text-lg font-black text-gray-900 dark:text-white pt-1 border-t border-dashed border-gray-200 dark:border-[#055740]/30">
                       <span>Total</span>
@@ -2078,7 +2098,7 @@ export default function AppContainer() {
                         : "bg-dfyf-green hover:bg-[#046c4e] text-white shadow-dfyf-green/20 cursor-pointer"
                     }`}
                   >
-                    {isRegisteringSale ? "Registrando..." : "Registrar Venta"}
+                    {isRegisteringSale ? "Registrando..." : (paymentMethod === "REGALO" ? "Registrar Regalo" : "Registrar Venta")}
                   </button>
                 </div>
               </div>
@@ -2262,6 +2282,7 @@ export default function AppContainer() {
                             <option value="TARJETA_DEBITO">Débito</option>
                             <option value="TARJETA_CREDITO">Crédito</option>
                             <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="REGALO">REGALO</option>
                           </select>
                         </div>
                         <div>
@@ -6539,6 +6560,7 @@ export default function AppContainer() {
                         <option value="Efectivo">Efectivo</option>
                         <option value="Transferencia">Transferencia</option>
                         <option value="MercadoPago">MercadoPago</option>
+                        <option value="REGALO">REGALO</option>
                         <option value="Otro">Otro</option>
                       </select>
                     </div>
