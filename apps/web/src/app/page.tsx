@@ -612,6 +612,15 @@ export default function AppContainer() {
     if (!selectedSaleDetail || !currentUser) return;
     setIsSavingSaleEdit(true);
     try {
+      const isGiftPayment = editPaymentMethod === "REGALO";
+      const finalVendedor = isGiftPayment ? "REGALO" : editVendedor;
+      const finalNotes = isGiftPayment ? (editNotes ? (editNotes.includes("REGALO") ? editNotes : `REGALO - ${editNotes}`) : "REGALO") : editNotes;
+
+      const finalItems = (editItems || []).map((item: any) => ({
+        ...item,
+        discount: isGiftPayment ? item.price : item.discount,
+      }));
+
       const res = await fetch(`${API_BASE_URL}/admin/sales/${selectedSaleDetail.id}`, {
         method: "PUT",
         headers: {
@@ -620,13 +629,13 @@ export default function AppContainer() {
         },
         body: JSON.stringify({
           date: new Date(editDate).toISOString(),
-          vendedor: editVendedor,
+          vendedor: finalVendedor,
           channel: editChannel,
           paymentMethod: editPaymentMethod,
-          paymentBank: editPaymentBank,
-          notes: editNotes,
+          paymentBank: isGiftPayment ? "" : editPaymentBank,
+          notes: finalNotes,
           customerId: editCustomer ? editCustomer.id : null,
-          items: editItems,
+          items: finalItems,
         }),
       });
 
@@ -6552,7 +6561,13 @@ export default function AppContainer() {
                       <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Método de Pago</label>
                       <select
                         value={editPaymentMethod}
-                        onChange={(e) => setEditPaymentMethod(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditPaymentMethod(val);
+                          if (val === "REGALO") {
+                            setEditVendedor("REGALO");
+                          }
+                        }}
                         className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
                       >
                         <option value="Débito">Débito</option>

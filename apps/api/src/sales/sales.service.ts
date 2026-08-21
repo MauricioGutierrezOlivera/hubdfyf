@@ -1615,9 +1615,28 @@ export class SalesService {
     const notesVal = updateData.notes !== undefined ? updateData.notes : existingSale.notes;
     const customerIdVal = updateData.customerId !== undefined ? updateData.customerId : existingSale.customerId;
 
-    let newTotal = existingSale.total;
+    const isGiftPayment =
+      (paymentMethodVal || '').toUpperCase() === 'REGALO' ||
+      (vendedorVal || '').toUpperCase() === 'REGALO';
 
-    if (updateData.items && updateData.items.length > 0) {
+    const finalVendedor = isGiftPayment ? 'REGALO' : vendedorVal;
+    const finalNotes = isGiftPayment
+      ? (notesVal ? (notesVal.includes('REGALO') ? notesVal : `REGALO - ${notesVal}`) : 'REGALO')
+      : notesVal;
+
+    let newTotal = isGiftPayment ? 0 : existingSale.total;
+
+    if (isGiftPayment) {
+      newTotal = 0;
+      for (const item of existingSale.items) {
+        await this.prisma.saleItem.update({
+          where: { id: item.id },
+          data: {
+            discount: item.price,
+          },
+        });
+      }
+    } else if (updateData.items && updateData.items.length > 0) {
       newTotal = 0;
       for (const item of updateData.items) {
         const isPercent = item.discount > 0 && item.discount <= 100;
@@ -1674,7 +1693,7 @@ export class SalesService {
             data: {
               quantity: item.quantity,
               price: item.price,
-              discount: item.discount,
+              discount: isGiftPayment ? item.price : item.discount,
             },
           });
         }
@@ -1685,13 +1704,14 @@ export class SalesService {
       where: { id },
       data: {
         date: dateVal,
-        vendedor: vendedorVal,
+        vendedor: finalVendedor,
         channel: channelVal,
         paymentMethod: paymentMethodVal,
-        paymentBank: paymentBankVal,
-        notes: notesVal,
+        paymentBank: isGiftPayment ? null : paymentBankVal,
+        notes: finalNotes,
         customerId: customerIdVal,
-        total: newTotal,
+        total: isGiftPayment ? 0 : newTotal,
+        userId: isGiftPayment ? null : existingSale.userId,
       },
       include: {
         customer: true,
