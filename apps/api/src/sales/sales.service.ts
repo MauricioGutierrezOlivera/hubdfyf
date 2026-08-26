@@ -689,7 +689,7 @@ export class SalesService {
           ? Math.round(originalPrice * (discountVal / 100))
           : discountVal;
           
-        const salePrice = originalPrice - discountAmount;
+        const rawSalePrice = Math.max(0, originalPrice - discountAmount);
 
         // Determine event type
         let eventType = 'Venta';
@@ -707,13 +707,20 @@ export class SalesService {
         } else {
           if (isExchange) {
             eventType = 'Cambio Sale';
-          } else if (isGiftSale || salePrice === 0 || discountVal === 100 || discountVal >= originalPrice) {
+          } else if (isGiftSale || rawSalePrice === 0 || discountVal === 100 || discountVal >= originalPrice) {
             eventType = 'Regalo';
           }
         }
 
-        // Calculate amount and units
-        const itemNetPrice = salePrice * item.quantity;
+        // Calculate negative impact for return / exchange in events
+        const isNegativeEvent = eventType === 'Cambio Entra' || eventType === 'Devolución';
+        const reportSalePrice = isNegativeEvent 
+          ? -Math.abs(rawSalePrice) 
+          : (eventType === 'Regalo' ? 0 : Math.abs(rawSalePrice));
+        const itemNetPrice = isNegativeEvent 
+          ? -Math.abs(rawSalePrice * Math.abs(item.quantity || 1))
+          : (eventType === 'Regalo' ? 0 : Math.abs(rawSalePrice * Math.abs(item.quantity || 1)));
+
         currentMonthAmount += itemNetPrice;
 
         const seller = sale.vendedor || 'ONLINE';
@@ -732,7 +739,7 @@ export class SalesService {
           model: item.product ? `${item.product.name}${item.product.color ? ` - ${item.product.color}` : ''}` : 'Producto',
           size: item.product?.size || 'UN',
           originalPrice,
-          salePrice,
+          salePrice: reportSalePrice,
           discount: Math.abs(discountAmount * item.quantity),
           vendedor: sale.vendedor || 'ONLINE',
           isSock: isProductSock,
@@ -790,11 +797,9 @@ export class SalesService {
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
             : discountVal;
-          const salePrice = originalPrice - discountAmount;
+          const rawSalePrice = Math.max(0, originalPrice - discountAmount);
 
-          prevMonthAmount += salePrice * item.quantity;
-
-          const isGift = isGiftSale || salePrice === 0 || discountVal === 100;
+          const isGift = isGiftSale || rawSalePrice === 0 || discountVal === 100;
           const normVendedor = (sale.vendedor || '').toLowerCase();
           
           let eventType = 'Venta';
@@ -813,6 +818,13 @@ export class SalesService {
               eventType = 'Regalo';
             }
           }
+
+          const isNegativeEvent = eventType === 'Cambio Entra' || eventType === 'Devolución';
+          const itemNetPrice = isNegativeEvent 
+            ? -Math.abs(rawSalePrice * Math.abs(item.quantity || 1))
+            : (eventType === 'Regalo' ? 0 : Math.abs(rawSalePrice * Math.abs(item.quantity || 1)));
+
+          prevMonthAmount += itemNetPrice;
 
           if (!isProductSock && eventType === 'Venta') {
             prevMonthShoesUnits += item.quantity;
@@ -856,11 +868,9 @@ export class SalesService {
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
             : discountVal;
-          const salePrice = originalPrice - discountAmount;
+          const rawSalePrice = Math.max(0, originalPrice - discountAmount);
 
-          prevYearSameMonthAmount += salePrice * item.quantity;
-
-          const isGift = isGiftSale || salePrice === 0 || discountVal === 100;
+          const isGift = isGiftSale || rawSalePrice === 0 || discountVal === 100;
           const normVendedor = (sale.vendedor || '').toLowerCase();
           
           let eventType = 'Venta';
@@ -879,6 +889,13 @@ export class SalesService {
               eventType = 'Regalo';
             }
           }
+
+          const isNegativeEvent = eventType === 'Cambio Entra' || eventType === 'Devolución';
+          const itemNetPrice = isNegativeEvent 
+            ? -Math.abs(rawSalePrice * Math.abs(item.quantity || 1))
+            : (eventType === 'Regalo' ? 0 : Math.abs(rawSalePrice * Math.abs(item.quantity || 1)));
+
+          prevYearSameMonthAmount += itemNetPrice;
 
           if (!isProductSock && eventType === 'Venta') {
             prevYearSameMonthShoesUnits += item.quantity;
@@ -922,11 +939,9 @@ export class SalesService {
           const discountAmount = isPercent 
             ? Math.round(originalPrice * (discountVal / 100))
             : discountVal;
-          const salePrice = originalPrice - discountAmount;
+          const rawSalePrice = Math.max(0, originalPrice - discountAmount);
 
-          prevYearSameMonthAmount += salePrice * item.quantity;
-
-          const isGift = isGiftSale || salePrice === 0 || discountVal === 100;
+          const isGift = isGiftSale || rawSalePrice === 0 || discountVal === 100;
           const normVendedor = (sale.vendedor || '').toLowerCase();
           
           let eventType = 'Venta';
@@ -945,6 +960,13 @@ export class SalesService {
               eventType = 'Regalo';
             }
           }
+
+          const isNegativeEvent = eventType === 'Cambio Entra' || eventType === 'Devolución';
+          const itemNetPrice = isNegativeEvent 
+            ? -Math.abs(rawSalePrice * Math.abs(item.quantity || 1))
+            : (eventType === 'Regalo' ? 0 : Math.abs(rawSalePrice * Math.abs(item.quantity || 1)));
+
+          prevYearSameMonthAmount += itemNetPrice;
 
           if (!isProductSock && eventType === 'Venta') {
             prevYearSameMonthShoesUnits += item.quantity;
@@ -1133,7 +1155,6 @@ export class SalesService {
             ? Math.round(originalPrice * (discountVal / 100))
             : discountVal;
           const salePrice = Math.max(0, originalPrice - discountAmount);
-          const itemNetPrice = isNaN(salePrice * qty) ? 0 : Math.round(salePrice * qty);
 
           let eventType = 'Venta';
           const normVendedor = (sale.vendedor || '').toLowerCase();
@@ -1152,6 +1173,11 @@ export class SalesService {
               eventType = 'Regalo';
             }
           }
+
+          const isNegativeEvent = eventType === 'Cambio Entra' || eventType === 'Devolución';
+          const itemNetPrice = isNegativeEvent
+            ? -Math.abs(Math.round(salePrice * Math.abs(qty)))
+            : (eventType === 'Regalo' ? 0 : Math.abs(Math.round(salePrice * Math.abs(qty))));
 
           mTotalAmount += itemNetPrice;
           if (isOnlineSale) {

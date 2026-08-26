@@ -3717,7 +3717,7 @@ export default function AppContainer() {
               const map = new Map<string, { totalRevenue: number; totalUnits: number }>();
               (reportData?.items || []).forEach((item: any) => {
                 const seller = item.vendedor || "ONLINE";
-                const netAmount = (item.salePrice || 0) * (item.quantity || 0);
+                const netAmount = (item.salePrice || 0) * Math.abs(item.quantity || 1);
                 const curr = map.get(seller) || { totalRevenue: 0, totalUnits: 0 };
                 map.set(seller, {
                   totalRevenue: curr.totalRevenue + netAmount,
@@ -3845,7 +3845,11 @@ export default function AppContainer() {
                       <div className="lg:col-span-3 bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4 flex flex-col justify-center items-center text-center gap-3">
                         <div className="w-full text-center">
                           <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Monto Facturado</span>
-                          <span className="text-xl lg:text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}</span>
+                          <span className="text-xl lg:text-2xl font-black text-gray-950 dark:text-white block mt-0.5">
+                            {(reportData?.summary?.totalAmount ?? 0) < 0 
+                              ? `-$${Math.abs(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}` 
+                              : `$${(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}`}
+                          </span>
                         </div>
                         <div className="w-full border-t border-gray-200/70 dark:border-[#055740]/40 pt-2.5 text-center">
                           <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Pares Vendidos</span>
@@ -4064,7 +4068,9 @@ export default function AppContainer() {
                                 </td>
                                 <td className="p-3.5 font-bold">{item.size}</td>
                                 <td className="p-3.5 text-right font-bold text-gray-400">${item.originalPrice.toLocaleString("es-CL")}</td>
-                                <td className="p-3.5 text-right font-black text-gray-900 dark:text-white">${item.salePrice.toLocaleString("es-CL")}</td>
+                                <td className={`p-3.5 text-right font-black ${item.salePrice < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                                  {item.salePrice < 0 ? `-$${Math.abs(item.salePrice).toLocaleString("es-CL")}` : `$${item.salePrice.toLocaleString("es-CL")}`}
+                                </td>
                                 <td className="p-3.5 text-right font-bold text-red-500">
                                   {(() => {
                                     const absDiscount = Math.abs(item.discount || 0);
@@ -4150,7 +4156,9 @@ export default function AppContainer() {
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-black text-emerald-950 dark:text-emerald-100 block">
-                            ${(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}
+                            {(reportData?.summary?.totalAmount ?? 0) < 0 
+                              ? `-$${Math.abs(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}` 
+                              : `$${(reportData?.summary?.totalAmount ?? 0).toLocaleString("es-CL")}`}
                           </span>
                         </div>
                       </div>
@@ -4186,8 +4194,8 @@ export default function AppContainer() {
                                   <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
                                     {row.percentage.toFixed(1)}%
                                   </td>
-                                  <td className="p-3.5 text-right font-black text-gray-950 dark:text-white text-sm">
-                                    ${row.totalRevenue.toLocaleString("es-CL")}
+                                  <td className={`p-3.5 text-right font-black text-sm ${row.totalRevenue < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-950 dark:text-white'}`}>
+                                    {row.totalRevenue < 0 ? `-$${Math.abs(row.totalRevenue).toLocaleString("es-CL")}` : `$${row.totalRevenue.toLocaleString("es-CL")}`}
                                   </td>
                                 </tr>
                               ))
