@@ -211,6 +211,8 @@ export default function AppContainer() {
   const [isEditingSale, setIsEditingSale] = useState<boolean>(false);
   const [editDate, setEditDate] = useState<string>("");
   const [editVendedor, setEditVendedor] = useState<string>("");
+  const [storeSellers, setStoreSellers] = useState<string[]>([]);
+  const [isLoadingStoreSellers, setIsLoadingStoreSellers] = useState<boolean>(false);
   const [editChannel, setEditChannel] = useState<string>("");
   const [editPaymentMethod, setEditPaymentMethod] = useState<string>("");
   const [editPaymentBank, setEditPaymentBank] = useState<string>("");
@@ -583,7 +585,32 @@ export default function AppContainer() {
     }
   };
 
+  const fetchStoreSellers = async (storeId: string) => {
+    if (!storeId || !currentUser) return;
+    setIsLoadingStoreSellers(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/stores/${storeId}/sellers`, {
+        headers: {
+          "x-user-id": currentUser.id,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStoreSellers(data);
+      }
+    } catch (e) {
+      console.error("Error loading store sellers:", e);
+    } finally {
+      setIsLoadingStoreSellers(false);
+    }
+  };
+
   const startEditingSale = (sale: any) => {
+    const targetStoreId = sale.storeId || sale.store?.id || activeStore?.id;
+    if (targetStoreId) {
+      fetchStoreSellers(targetStoreId);
+    }
+
     const d = new Date(sale.date);
     const tzOffset = d.getTimezoneOffset() * 60000;
     const localISOTime = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
@@ -6541,13 +6568,27 @@ export default function AppContainer() {
                     {/* Vendedor */}
                     <div>
                       <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Vendedor</label>
-                      <input 
-                        type="text"
-                        value={editVendedor}
-                        onChange={(e) => setEditVendedor(e.target.value)}
-                        placeholder="Nombre del Vendedor (ej: Beatriz, Marite)"
-                        className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green"
-                      />
+                      {isLoadingStoreSellers ? (
+                        <div className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-400">
+                          Cargando vendedores...
+                        </div>
+                      ) : (
+                        <select
+                          value={editVendedor}
+                          onChange={(e) => setEditVendedor(e.target.value)}
+                          className="w-full p-2.5 bg-gray-50 dark:bg-[#022c20] border border-gray-200 dark:border-[#055740] rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-dfyf-green cursor-pointer"
+                        >
+                          <option value="" disabled>Seleccione Vendedor</option>
+                          {editVendedor && !storeSellers.some((s) => s.toLowerCase() === editVendedor.toLowerCase()) && (
+                            <option value={editVendedor}>{editVendedor}</option>
+                          )}
+                          {storeSellers.map((sellerName) => (
+                            <option key={sellerName} value={sellerName}>
+                              {sellerName}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     {/* Canal de Venta */}

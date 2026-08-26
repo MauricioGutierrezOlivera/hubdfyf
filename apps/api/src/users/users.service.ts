@@ -301,4 +301,48 @@ export class UsersService {
   async getCountries() {
     return this.prisma.country.findMany();
   }
+
+  async getStoreSellers(storeId: string) {
+    if (!storeId) return [];
+
+    const userStores = await this.prisma.userStore.findMany({
+      where: { storeId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    const registeredUserNames = userStores
+      .map((us) => us.user.name?.trim())
+      .filter((name): name is string => Boolean(name && name.length > 0));
+
+    const salesVendedores = await this.prisma.sale.findMany({
+      where: {
+        storeId,
+        vendedor: { not: null },
+      },
+      select: { vendedor: true },
+      distinct: ['vendedor'],
+    });
+
+    const historicalVendedores = salesVendedores
+      .map((s) => s.vendedor?.trim())
+      .filter((v): v is string => Boolean(v && v.length > 0 && v !== 'REGALO'));
+
+    const sellerSet = new Map<string, string>();
+    for (const name of [...registeredUserNames, ...historicalVendedores]) {
+      const lower = name.toLowerCase();
+      if (!sellerSet.has(lower)) {
+        sellerSet.set(lower, name);
+      }
+    }
+
+    return Array.from(sellerSet.values()).sort((a, b) => a.localeCompare(b, 'es'));
+  }
 }

@@ -73,6 +73,15 @@ export class UsersController {
     return this.usersService.getStores(userId);
   }
 
+  @Get('stores/:storeId/sellers')
+  async getStoreSellers(
+    @Headers('x-user-id') userId: string,
+    @Param('storeId') storeId: string,
+  ) {
+    this.checkAuth(userId);
+    return this.usersService.getStoreSellers(storeId);
+  }
+
   @Get('countries')
   async getCountries() {
     return this.usersService.getCountries();
