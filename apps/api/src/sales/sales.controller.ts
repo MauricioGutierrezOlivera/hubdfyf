@@ -23,9 +23,10 @@ export class SalesController {
   async getPOSCatalog(
     @Headers('x-user-id') userId: string,
     @Headers('x-store-id') storeId: string,
+    @Query('refresh') refresh?: string,
   ) {
     this.checkAuth(userId, storeId);
-    return this.salesService.getPOSCatalog(storeId);
+    return this.salesService.getPOSCatalog(storeId, refresh === 'true' || refresh === '1');
   }
 
   @Get('sales/:id')

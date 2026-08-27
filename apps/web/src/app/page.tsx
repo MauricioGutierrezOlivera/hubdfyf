@@ -357,7 +357,7 @@ export default function AppContainer() {
     if (!currentUser || !activeStore) return;
     setIsLoadingCatalog(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/pos-catalog`, {
+      const res = await fetch(`${API_BASE_URL}/admin/pos-catalog?refresh=true&_t=${Date.now()}`, {
         headers: {
           "x-user-id": currentUser.id,
           "x-store-id": activeStore.id,
@@ -3796,6 +3796,7 @@ export default function AppContainer() {
                                   const data = await res.json();
                                   if (res.ok && data.success) {
                                     alert(`✅ ${data.message}`);
+                                    fetchCatalog();
                                     fetchStockReport();
                                     fetchReportData();
                                   } else {
@@ -3830,6 +3831,7 @@ export default function AppContainer() {
                                   const data = await res.json();
                                   if (res.ok && data.success) {
                                     alert(`✅ ${data.message}`);
+                                    fetchCatalog();
                                     fetchStockReport();
                                     fetchReportData();
                                   } else {

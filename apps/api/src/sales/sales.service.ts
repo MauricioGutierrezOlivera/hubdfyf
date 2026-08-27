@@ -97,9 +97,16 @@ export class SalesService {
 
   private catalogCache = new Map<string, { timestamp: number; data: any }>();
 
-  async getPOSCatalog(storeId: string) {
+  public clearCatalogCache() {
+    this.catalogCache.clear();
+  }
+
+  async getPOSCatalog(storeId: string, refresh?: boolean) {
+    if (refresh) {
+      this.catalogCache.delete(storeId);
+    }
     const cached = this.catalogCache.get(storeId);
-    if (cached && cached.data.length > 0 && Date.now() - cached.timestamp < 60_000) {
+    if (!refresh && cached && cached.data.length > 0 && Date.now() - cached.timestamp < 60_000) {
       return cached.data;
     }
 
