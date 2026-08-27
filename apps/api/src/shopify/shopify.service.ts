@@ -326,43 +326,180 @@ export class ShopifyService implements OnModuleInit {
   }
 
   /**
-   * Sync all active products, prices, and compare_at_price values directly from Shopify into PostgreSQL database.
+   * Helper method to fetch inventory levels for a list of inventory_item_ids from Shopify Admin REST API.
+   * Handles chunking up to 50 inventory_item_ids per HTTP request.
    */
-  async syncCatalogFromShopify(): Promise<{ success: boolean; updatedVariantsCount: number }> {
+  async getInventoryLevelsForItems(inventoryItemIds: string[]): Promise<Map<string, number>> {
+    const stockMap = new Map<string, number>(); // inventory_item_id -> total available stock
+    if (!inventoryItemIds || inventoryItemIds.length === 0) return stockMap;
+
+    const chunkSize = 50;
+    for (let i = 0; i < inventoryItemIds.length; i += chunkSize) {
+      const chunk = inventoryItemIds.slice(i, i + chunkSize);
+      const idsParam = chunk.join(',');
+
+      try {
+        const data = await this.shopifyFetch<any>(`inventory_levels.json?inventory_item_ids=${idsParam}`);
+        if (data && Array.isArray(data.inventory_levels)) {
+          for (const il of data.inventory_levels) {
+            const itemIdStr = String(il.inventory_item_id);
+            const avail = typeof il.available === 'number' ? il.available : 0;
+            const current = stockMap.get(itemIdStr) || 0;
+            stockMap.set(itemIdStr, current + avail);
+          }
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to fetch inventory levels for batch starting at index ${i}: ${err.message}`);
+      }
+    }
+
+    return stockMap;
+  }
+
+  /**
+   * FULL INVENTORY & CATALOG SWEEP FROM SHOPIFY
+   * Syncs ALL active products, variants, pricing, AND real-time available stock levels into PostgreSQL DB.
+   * Auto-creates missing products/variants in DB if added on Shopify.
+   */
+  async syncFullInventoryFromShopify(): Promise<{
+    success: boolean;
+    totalProductsSynced: number;
+    totalVariantsSynced: number;
+    createdVariantsCount: number;
+    updatedStockCount: number;
+    message: string;
+  }> {
     try {
-      this.logger.log('[Shopify Sync] Syncing catalog & compareAtPrice values from Shopify...');
+      this.logger.log('[Shopify Full Sweep] Starting full catalog & inventory sweep from Shopify...');
+
+      const defaultStore = await this.prisma.store.findFirst();
+      if (!defaultStore) {
+        throw new Error('No store configured in PostgreSQL database');
+      }
+      const storeId = defaultStore.id;
+
+      // 1. Fetch ALL active products from Shopify across all pages
       const products = await this.getAllShopifyProducts();
-      let updatedVariantsCount = 0;
+      let totalVariantsSynced = 0;
+      let createdVariantsCount = 0;
+      let updatedStockCount = 0;
+
+      // Map to keep inventory_item_id -> shopifyVariantId & dbProductId
+      const itemToVariantMap = new Map<string, { shopifyId: string; dbProductId: string }>();
+      const allInventoryItemIds: string[] = [];
 
       for (const p of products) {
+        const imageUrl = p.image?.src || p.images?.[0]?.src || null;
+        const family = p.product_type || 'Calzado';
+        const style = p.product_type || 'General';
+
         for (const v of p.variants) {
           const shopifyId = String(v.id);
+          const size = String(v.option1 || v.title || 'Única');
           const price = parseFloat(v.price || '0');
           const compareAtPrice = v.compare_at_price ? parseFloat(v.compare_at_price) : null;
-          const imageUrl = p.image?.src || p.images?.[0]?.src || null;
+          const sku = v.sku || null;
+          const inventoryItemId = String(v.inventory_item_id || '');
 
-          try {
-            const resUpdate = await this.prisma.product.updateMany({
-              where: { shopifyId },
+          // Upsert Product record in local DB
+          let dbProduct = await this.prisma.product.findUnique({ where: { shopifyId } });
+
+          if (!dbProduct) {
+            dbProduct = await this.prisma.product.create({
               data: {
+                shopifyId,
+                sku,
+                name: p.title,
+                family,
+                style,
+                size,
                 price,
                 compareAtPrice,
-                ...(imageUrl ? { imageUrl } : {}),
+                imageUrl,
+                status: 'active',
               },
             });
-            updatedVariantsCount += resUpdate.count;
-          } catch (e) {
-            // Ignore individual variant update errors
+            createdVariantsCount++;
+          } else {
+            dbProduct = await this.prisma.product.update({
+              where: { shopifyId },
+              data: {
+                name: p.title,
+                size,
+                price,
+                compareAtPrice,
+                status: 'active',
+                ...(imageUrl ? { imageUrl } : {}),
+                ...(sku ? { sku } : {}),
+              },
+            });
+          }
+
+          totalVariantsSynced++;
+
+          if (inventoryItemId) {
+            itemToVariantMap.set(inventoryItemId, { shopifyId, dbProductId: dbProduct.id });
+            allInventoryItemIds.push(inventoryItemId);
           }
         }
       }
 
-      this.logger.log(`[Shopify Sync] Catalog sync complete. Updated ${updatedVariantsCount} product variants in DB.`);
-      return { success: true, updatedVariantsCount };
-    } catch (err) {
-      this.logger.error(`[Shopify Sync] Catalog sync failed: ${err}`);
-      return { success: false, updatedVariantsCount: 0 };
+      // 2. Fetch real-time available stock levels for all variants from Shopify API
+      this.logger.log(`[Shopify Full Sweep] Fetching real-time stock levels for ${allInventoryItemIds.length} inventory items...`);
+      const stockMap = await this.getInventoryLevelsForItems(allInventoryItemIds);
+
+      // 3. Update Inventory table in HUB DB
+      for (const [inventoryItemId, { dbProductId }] of itemToVariantMap.entries()) {
+        const availableQty = stockMap.get(inventoryItemId) ?? 0;
+
+        await this.prisma.inventory.upsert({
+          where: { storeId_productId: { storeId, productId: dbProductId } },
+          create: {
+            storeId,
+            productId: dbProductId,
+            quantity: Math.max(0, availableQty),
+          },
+          update: {
+            quantity: Math.max(0, availableQty),
+          },
+        });
+        updatedStockCount++;
+      }
+
+      const msg = `Barrido completo de inventario finalizado: ${products.length} modelos activos, ${totalVariantsSynced} variantes (${createdVariantsCount} nuevas creadas), y ${updatedStockCount} stocks actualizados al nivel exacto de Shopify.`;
+      this.logger.log(`[Shopify Full Sweep] ${msg}`);
+
+      return {
+        success: true,
+        totalProductsSynced: products.length,
+        totalVariantsSynced,
+        createdVariantsCount,
+        updatedStockCount,
+        message: msg,
+      };
+    } catch (err: any) {
+      this.logger.error(`[Shopify Full Sweep] Failed: ${err.message}`);
+      return {
+        success: false,
+        totalProductsSynced: 0,
+        totalVariantsSynced: 0,
+        createdVariantsCount: 0,
+        updatedStockCount: 0,
+        message: `Error al realizar barrido de inventario: ${err.message}`,
+      };
     }
+  }
+
+  /**
+   * Sync all active products, prices, compare_at_price AND real-time inventory values directly from Shopify into PostgreSQL database.
+   */
+  async syncCatalogFromShopify(): Promise<{ success: boolean; updatedVariantsCount: number; message?: string }> {
+    const res = await this.syncFullInventoryFromShopify();
+    return {
+      success: res.success,
+      updatedVariantsCount: res.totalVariantsSynced,
+      message: res.message,
+    };
   }
 
   /**
@@ -735,6 +872,14 @@ export class ShopifyService implements OnModuleInit {
               await this.prisma.inventory.update({
                 where: { id: inv.id },
                 data: { quantity: Math.max(0, inv.quantity - qty) },
+              });
+            } else {
+              await this.prisma.inventory.create({
+                data: {
+                  storeId,
+                  productId: product.id,
+                  quantity: 0,
+                },
               });
             }
           }

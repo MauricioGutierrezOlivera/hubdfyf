@@ -180,6 +180,7 @@ export default function AppContainer() {
   const [isApplyingPriceAdjustment, setIsApplyingPriceAdjustment] = useState(false);
   const [priceAdjustmentResult, setPriceAdjustmentResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSyncingOnlineOrders, setIsSyncingOnlineOrders] = useState(false);
+  const [isSyncingFullStock, setIsSyncingFullStock] = useState(false);
 
   // Returns / Exchanges States
   const [exchangeSearchQuery, setExchangeSearchQuery] = useState("");
@@ -3782,7 +3783,7 @@ export default function AppContainer() {
                         {(isAdmin || currentUser?.role === "VISITOR") && (
                           <>
                             <button
-                              disabled={isSyncingOnlineOrders || currentUser?.role === "VISITOR"}
+                              disabled={isSyncingOnlineOrders || isSyncingFullStock || currentUser?.role === "VISITOR"}
                               onClick={async () => {
                                 if (currentUser?.role === "VISITOR") return;
                                 setIsSyncingOnlineOrders(true);
@@ -3814,6 +3815,40 @@ export default function AppContainer() {
                               title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Sincronizar ventas online recientes de Shopify y descontar su stock en la BD"}
                             >
                               <span>🔄</span> {isSyncingOnlineOrders ? "Sincronizando..." : "Sincronizar Ventas Web"}
+                            </button>
+
+                            <button
+                              disabled={isSyncingFullStock || isSyncingOnlineOrders || currentUser?.role === "VISITOR"}
+                              onClick={async () => {
+                                if (currentUser?.role === "VISITOR") return;
+                                setIsSyncingFullStock(true);
+                                try {
+                                  const res = await fetch(`${API_BASE_URL}/shopify/sync-inventory`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || 'admin' },
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok && data.success) {
+                                    alert(`✅ ${data.message}`);
+                                    fetchStockReport();
+                                    fetchReportData();
+                                  } else {
+                                    alert(`⚠️ ${data.message || 'Error al realizar el barrido de stock.'}`);
+                                  }
+                                } catch (err: any) {
+                                  alert(`⚠️ Error de conexión: ${err.message}`);
+                                } finally {
+                                  setIsSyncingFullStock(false);
+                                }
+                              }}
+                              className={`px-3.5 py-1.5 font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 h-9 ${
+                                currentUser?.role === "VISITOR"
+                                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-60 cursor-not-allowed border border-gray-400/40"
+                                  : "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer disabled:opacity-50"
+                              }`}
+                              title={currentUser?.role === "VISITOR" ? "Acción restringida para perfil Visita" : "Barrido completo de catálogo y stock en tiempo real desde Shopify al HUB"}
+                            >
+                              <span>📦</span> {isSyncingFullStock ? "Barrido en Proceso..." : "Barrido Completo Stock"}
                             </button>
 
                             <button

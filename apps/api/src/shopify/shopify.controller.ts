@@ -65,6 +65,15 @@ export class ShopifyController {
   }
 
   /**
+   * POST /shopify/sync-inventory
+   * Manually trigger full catalog & inventory stock sweep from Shopify to PostgreSQL DB.
+   */
+  @Post('sync-inventory')
+  async syncInventory() {
+    return this.shopifyService.syncFullInventoryFromShopify();
+  }
+
+  /**
    * POST /shopify/bulk-adjust-prices
    * Bulk adjust prices for a list of model names by discount percentage (0 = remove discount).
    */
