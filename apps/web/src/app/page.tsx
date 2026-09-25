@@ -424,7 +424,9 @@ export default function AppContainer() {
       alert("Por favor, selecciona al menos un calzado a llevar.");
       return;
     }
-    
+
+    const isGiftExchange = operationMode === "EXCHANGE" && selectedReturnItem.pricePaid === 0;
+
     if (operationMode === "REFUND") {
       const saleDate = new Date(selectedReturnItem.saleDate);
       const daysDiff = Math.floor((Date.now() - saleDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -462,12 +464,14 @@ export default function AppContainer() {
         type: "EXCHANGE",
         notes: operationMode === "REFUND"
           ? `Devolución de dinero: Reingreso de ${selectedReturnItem.productName} (Talla ${selectedReturnItem.size}) de la venta original #${selectedReturnItem.saleId.slice(0, 8)}`
-          : `Cambio: Reingreso de ${selectedReturnItem.productName} (Talla ${selectedReturnItem.size}) de la venta original #${selectedReturnItem.saleId.slice(0, 8)} por ${selectedExchangeItems.map(x => `${x.quantity}x ${x.productName} (Talla ${x.size})`).join(', ')}`,
+          : `Cambio${isGiftExchange ? " de regalo (costo cero)" : ""}: Reingreso de ${selectedReturnItem.productName} (Talla ${selectedReturnItem.size}) de la venta original #${selectedReturnItem.saleId.slice(0, 8)} por ${selectedExchangeItems.map(x => `${x.quantity}x ${x.productName} (Talla ${x.size})`).join(', ')}`,
         vendedor: currentUser?.name || "Vendedor",
         channel: "OFFLINE",
         paymentMethod: operationMode === "REFUND"
           ? exchangePaymentMethod
-          : diff > 0 ? exchangePaymentMethod : "EFECTIVO",
+          : isGiftExchange
+            ? "REGALO"
+            : diff > 0 ? exchangePaymentMethod : "EFECTIVO",
         items: [
           {
             productId: selectedReturnItem.productId,
@@ -2709,8 +2713,9 @@ export default function AppContainer() {
 
                   {(() => {
                     const returnAmount = selectedReturnItem.pricePaid;
+                    const isGiftExchange = returnAmount === 0;
                     const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
-                    const diff = newItemsTotal - returnAmount;
+                    const diff = isGiftExchange ? 0 : newItemsTotal - returnAmount;
                     return (
                       <div className="space-y-4 mt-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2737,7 +2742,7 @@ export default function AppContainer() {
                                   : selectedExchangeItems.map(x => `Talla ${x.size}`).join(', ')}
                               </p>
                             </div>
-                            <p className="text-lg font-black text-green-600 dark:text-green-400 mt-2">+${newItemsTotal.toLocaleString("es-CL")}</p>
+                            <p className="text-lg font-black text-green-600 dark:text-green-400 mt-2">+${(isGiftExchange ? 0 : newItemsTotal).toLocaleString("es-CL")}</p>
                           </div>
                         </div>
 
@@ -2752,13 +2757,19 @@ export default function AppContainer() {
                           )}
                         </div>
 
-                        {diff < 0 && (
+                        {isGiftExchange && (
+                          <div className="p-3.5 bg-dfyf-green/10 border border-dfyf-green/20 text-dfyf-green rounded-xl text-xs font-bold">
+                            🎁 El calzado devuelto fue entregado como regalo (costo $0), por lo que el calzado nuevo también se entrega sin costo. No se debe cobrar nada a la clienta.
+                          </div>
+                        )}
+
+                        {!isGiftExchange && diff < 0 && (
                           <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-bold">
                             ⚠️ Advertencia: El valor de los calzados seleccionados es inferior al devuelto. La clienta perderá el saldo de <strong>${Math.abs(diff).toLocaleString("es-CL")}</strong>, ya que no se realiza devolución de dinero en cambios. Puedes proceder con la confirmación si la clienta acepta esta condición.
                           </div>
                         )}
 
-                        {diff > 0 && (
+                        {!isGiftExchange && diff > 0 && (
                           <div className="space-y-2">
                             <label className="block text-xs font-bold text-gray-400 uppercase">Medio de Pago para el Excedente</label>
                             <select 
