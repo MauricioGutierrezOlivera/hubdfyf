@@ -470,7 +470,7 @@ export default function AppContainer() {
         paymentMethod: operationMode === "REFUND"
           ? exchangePaymentMethod
           : isGiftExchange
-            ? "REGALO"
+            ? "EFECTIVO"
             : diff > 0 ? exchangePaymentMethod : "EFECTIVO",
         items: [
           {
@@ -483,7 +483,7 @@ export default function AppContainer() {
             productId: it.productId,
             quantity: it.quantity,
             price: it.price,
-            discount: 0,
+            discount: isGiftExchange ? it.price : 0,
           })) : [])
         ]
       };
