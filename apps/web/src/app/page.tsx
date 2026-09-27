@@ -62,13 +62,40 @@ interface Customer {
   phone?: string;
 }
 
+// Propuestas (Admin) types
+interface ProposalSize {
+  size: string;
+  inventoryQuantity: number;
+  inventoryItemId: number;
+}
+
+interface ProposalSearchResult {
+  id: number;
+  title: string;
+  imageUrl: string | null;
+  price: number;
+  sizes: ProposalSize[];
+}
+
+const PROPOSAL_ALL_SIZES = ["35", "36", "37", "38", "39", "40", "41", "42"];
+
+interface ProposalItem {
+  key: string;
+  modelo: string;
+  descripcion: string;
+  imageUrl: string | null;
+  pvp: number;
+  margen: number; // fraction, e.g. 0.30
+  sizes: Record<string, number>;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function AppContainer() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeStore, setActiveStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock" | "propuestas">("pos");
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -278,6 +305,19 @@ export default function AppContainer() {
       setIsStockDiscountDropdownOpen(false);
     }
   };
+
+  // Propuestas (Admin Only) States
+  const [proposalClientName, setProposalClientName] = useState("");
+  const [proposalSearchQuery, setProposalSearchQuery] = useState("");
+  const [proposalSearchResults, setProposalSearchResults] = useState<ProposalSearchResult[]>([]);
+  const [isSearchingProposalProducts, setIsSearchingProposalProducts] = useState(false);
+  const [proposalSelectedProduct, setProposalSelectedProduct] = useState<ProposalSearchResult | null>(null);
+  const [proposalWorkingPvp, setProposalWorkingPvp] = useState(0);
+  const [proposalWorkingMargen, setProposalWorkingMargen] = useState(30);
+  const [proposalWorkingSizes, setProposalWorkingSizes] = useState<Record<string, number>>({});
+  const [proposalItems, setProposalItems] = useState<ProposalItem[]>([]);
+  const [isGeneratingProposalExcel, setIsGeneratingProposalExcel] = useState(false);
+  const [proposalError, setProposalError] = useState("");
 
   // Admin Section States
   const [users, setUsers] = useState<User[]>([]);
@@ -1360,6 +1400,127 @@ export default function AppContainer() {
     }
   };
 
+  // Propuestas: search Shopify models by name
+  const searchProposalProducts = async () => {
+    if (!currentUser) return;
+    setIsSearchingProposalProducts(true);
+    setProposalError("");
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/proposals/search?q=${encodeURIComponent(proposalSearchQuery)}`,
+        { headers: { "x-user-id": currentUser.id } }
+      );
+      if (!res.ok) throw new Error("No se pudo buscar en Shopify");
+      const data = await res.json();
+      setProposalSearchResults(data);
+    } catch (err: any) {
+      setProposalError(err.message || "Error al buscar modelos");
+      setProposalSearchResults([]);
+    } finally {
+      setIsSearchingProposalProducts(false);
+    }
+  };
+
+  // Propuestas: pick a search result to configure (PVP, margen, tallas) before adding
+  const selectProposalProduct = (product: ProposalSearchResult) => {
+    setProposalSelectedProduct(product);
+    setProposalWorkingPvp(product.price);
+    setProposalWorkingMargen(30);
+    const sizeMap: Record<string, number> = {};
+    for (const s of PROPOSAL_ALL_SIZES) {
+      const found = product.sizes.find((v) => v.size === s);
+      sizeMap[s] = found ? Math.max(0, found.inventoryQuantity) : 0;
+    }
+    setProposalWorkingSizes(sizeMap);
+  };
+
+  // Propuestas: stock available for the size currently being edited (to clamp +/-)
+  const proposalStockFor = (size: string): number => {
+    const found = proposalSelectedProduct?.sizes.find((v) => v.size === size);
+    return found ? Math.max(0, found.inventoryQuantity) : 0;
+  };
+
+  const changeProposalWorkingSize = (size: string, delta: number) => {
+    setProposalWorkingSizes((prev) => {
+      const max = proposalStockFor(size);
+      const next = Math.min(max, Math.max(0, (prev[size] || 0) + delta));
+      return { ...prev, [size]: next };
+    });
+  };
+
+  const addProposalItemToCart = () => {
+    if (!proposalSelectedProduct) return;
+    const newItem: ProposalItem = {
+      key: `${proposalSelectedProduct.id}-${Date.now()}`,
+      modelo: proposalSelectedProduct.title,
+      descripcion: "",
+      imageUrl: proposalSelectedProduct.imageUrl,
+      pvp: proposalWorkingPvp,
+      margen: proposalWorkingMargen / 100,
+      sizes: { ...proposalWorkingSizes },
+    };
+    setProposalItems((prev) => [...prev, newItem]);
+    setProposalSelectedProduct(null);
+    setProposalSearchResults([]);
+    setProposalSearchQuery("");
+  };
+
+  const removeProposalItem = (key: string) => {
+    setProposalItems((prev) => prev.filter((it) => it.key !== key));
+  };
+
+  const updateProposalItem = (key: string, patch: Partial<ProposalItem>) => {
+    setProposalItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  };
+
+  const proposalItemPares = (item: ProposalItem) =>
+    PROPOSAL_ALL_SIZES.reduce((sum, s) => sum + (item.sizes[s] || 0), 0);
+
+  const proposalItemCostoNeto = (item: ProposalItem) => (item.pvp / 1.19) * (1 - item.margen);
+
+  const proposalMontoFinal = proposalItems.reduce(
+    (sum, it) => sum + proposalItemCostoNeto(it) * proposalItemPares(it),
+    0
+  );
+
+  // Propuestas: generate and download the final Excel
+  const generateProposalExcel = async () => {
+    if (!currentUser || proposalItems.length === 0) return;
+    setIsGeneratingProposalExcel(true);
+    setProposalError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/proposals/excel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": currentUser.id },
+        body: JSON.stringify({
+          clientName: proposalClientName,
+          items: proposalItems.map((it) => ({
+            modelo: it.modelo,
+            descripcion: it.descripcion,
+            imageUrl: it.imageUrl,
+            pvp: it.pvp,
+            margen: it.margen,
+            sizes: it.sizes,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo generar el Excel");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Propuesta_DFYF_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setProposalError(err.message || "Error al generar el Excel");
+    } finally {
+      setIsGeneratingProposalExcel(false);
+    }
+  };
+
   // Calculate totals
   const getActualItemDiscount = (item: CartItem) => {
     if (item.discountType === "percent") {
@@ -1686,18 +1847,30 @@ export default function AppContainer() {
         </nav>
 
         {/* Sidebar Footer: Configuración */}
-        <div className="p-4 border-t border-gray-200 dark:border-[#055740]">
+        <div className="p-4 border-t border-gray-200 dark:border-[#055740] space-y-2">
           {(currentUser.role === "SUPER_ADMIN" || currentUser.role === "COUNTRY_ADMIN") ? (
-            <button 
-              onClick={() => { setActiveTab("admin"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
-                activeTab === "admin" 
-                  ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20" 
-                  : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#055740]"
-              }`}
-            >
-              <span>⚙️ Configuración</span>
-            </button>
+            <>
+              <button
+                onClick={() => { setActiveTab("propuestas"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
+                  activeTab === "propuestas"
+                    ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20"
+                    : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#055740]"
+                }`}
+              >
+                <span>📋 Propuestas</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab("admin"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
+                  activeTab === "admin"
+                    ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20"
+                    : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#055740]"
+                }`}
+              >
+                <span>⚙️ Configuración</span>
+              </button>
+            </>
           ) : (
             <div className="text-center py-2 text-xs font-bold text-gray-400">
               DFYF Gestor de Ventas
@@ -6007,6 +6180,256 @@ export default function AppContainer() {
         </div>
       );
     })()}
+
+          {/* TAB: PROPUESTAS (Admin Only) */}
+          {activeTab === "propuestas" && (
+            <div className="h-full overflow-y-auto pr-2 pb-12">
+              <div className="space-y-6 pb-8">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black">Propuestas Comerciales</h1>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Busca modelos en Shopify, arma la propuesta con tallas, PVP y margen por modelo, y descarga el Excel para compartir.
+                  </p>
+                </div>
+
+                {proposalError && (
+                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-bold">
+                    {proposalError}
+                  </div>
+                )}
+
+                {/* Cliente + búsqueda */}
+                <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-6 shadow-sm space-y-4">
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400 block mb-1 uppercase tracking-wider">
+                      Cliente (potencial)
+                    </label>
+                    <input
+                      type="text"
+                      value={proposalClientName}
+                      onChange={(e) => setProposalClientName(e.target.value)}
+                      placeholder="Nombre del cliente al que se enviará la propuesta"
+                      className="w-full px-3.5 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#044c38] text-sm focus:outline-none focus:ring-1 focus:ring-dfyf-green"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={proposalSearchQuery}
+                      onChange={(e) => setProposalSearchQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") searchProposalProducts(); }}
+                      placeholder="Buscar modelo por nombre (ej: Lirio, Nenúfar...)"
+                      className="flex-1 px-3.5 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#044c38] text-sm focus:outline-none focus:ring-1 focus:ring-dfyf-green"
+                    />
+                    <button
+                      onClick={searchProposalProducts}
+                      disabled={isSearchingProposalProducts}
+                      className="px-5 py-2 bg-dfyf-green text-white rounded-xl font-bold text-sm hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSearchingProposalProducts ? "Buscando..." : "Buscar"}
+                    </button>
+                  </div>
+
+                  {/* Resultados de búsqueda */}
+                  {proposalSearchResults.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {proposalSearchResults.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => selectProposalProduct(p)}
+                          className="flex items-center gap-3 p-3 border border-gray-200 dark:border-[#055740] rounded-xl hover:border-dfyf-green hover:bg-dfyf-green/5 transition-all text-left cursor-pointer"
+                        >
+                          <div className="w-14 h-14 bg-[#F9FAFB] dark:bg-[#022c20] rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xl">👞</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm truncate">{p.title}</div>
+                            <div className="text-xs text-dfyf-green font-bold">${p.price.toLocaleString("es-CL")}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Panel de configuración del modelo seleccionado */}
+                {proposalSelectedProduct && (
+                  <div className="bg-white dark:bg-[#033b2b] border border-dfyf-green rounded-3xl p-6 shadow-sm space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 bg-[#F9FAFB] dark:bg-[#022c20] rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                        {proposalSelectedProduct.imageUrl ? (
+                          <img src={proposalSelectedProduct.imageUrl} alt={proposalSelectedProduct.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-3xl">👞</span>
+                        )}
+                      </div>
+                      <h3 className="font-black text-lg">{proposalSelectedProduct.title}</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400 block mb-1 uppercase tracking-wider">PVP Sugerido</label>
+                        <input
+                          type="number"
+                          value={proposalWorkingPvp}
+                          onChange={(e) => setProposalWorkingPvp(Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#044c38] text-sm font-bold focus:outline-none focus:ring-1 focus:ring-dfyf-green"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400 block mb-1 uppercase tracking-wider">Margen Cliente (%)</label>
+                        <input
+                          type="number"
+                          value={proposalWorkingMargen}
+                          onChange={(e) => setProposalWorkingMargen(Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-[#055740] rounded-xl bg-white dark:bg-[#044c38] text-sm font-bold focus:outline-none focus:ring-1 focus:ring-dfyf-green"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400 block mb-1 uppercase tracking-wider">Costo Cliente (neto, por par)</label>
+                        <div className="px-3 py-2 rounded-xl bg-gray-50 dark:bg-[#022c20] text-sm font-black text-dfyf-green dark:text-green-400">
+                          ${Math.round((proposalWorkingPvp / 1.19) * (1 - proposalWorkingMargen / 100)).toLocaleString("es-CL")}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 block mb-2 uppercase tracking-wider">
+                        Tallas y cantidad de pares (por defecto = stock disponible en Shopify)
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {PROPOSAL_ALL_SIZES.map((size) => {
+                          const stock = proposalStockFor(size);
+                          const qty = proposalWorkingSizes[size] || 0;
+                          return (
+                            <div key={size} className="flex flex-col items-center border border-gray-200 dark:border-[#055740] rounded-xl px-2 py-1.5 min-w-[64px]">
+                              <span className="text-[10px] font-bold text-gray-400">{size} (stock {stock})</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => changeProposalWorkingSize(size, -1)}
+                                  disabled={qty <= 0}
+                                  className="w-6 h-6 flex items-center justify-center rounded-md border border-gray-200 dark:border-[#055740] text-sm font-black disabled:opacity-30 cursor-pointer"
+                                >
+                                  −
+                                </button>
+                                <span className="w-6 text-center text-sm font-black">{qty}</span>
+                                <button
+                                  onClick={() => changeProposalWorkingSize(size, 1)}
+                                  disabled={qty >= stock}
+                                  className="w-6 h-6 flex items-center justify-center rounded-md border border-gray-200 dark:border-[#055740] text-sm font-black disabled:opacity-30 cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={addProposalItemToCart}
+                        className="px-5 py-2.5 bg-dfyf-green text-white rounded-xl font-bold text-sm hover:opacity-90 cursor-pointer"
+                      >
+                        ✓ Agregar a la Propuesta
+                      </button>
+                      <button
+                        onClick={() => setProposalSelectedProduct(null)}
+                        className="px-5 py-2.5 border border-gray-200 dark:border-[#055740] rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Carrito de la propuesta */}
+                <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-6 shadow-sm">
+                  <h3 className="font-black text-lg mb-4">Modelos en la Propuesta ({proposalItems.length})</h3>
+
+                  {proposalItems.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400 text-sm font-bold">
+                      Aún no has agregado modelos. Búscalos arriba.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {proposalItems.map((item) => (
+                        <div key={item.key} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 border border-gray-100 dark:border-[#055740]/40 rounded-xl">
+                          <div className="w-14 h-14 bg-[#F9FAFB] dark:bg-[#022c20] rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.modelo} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xl">👞</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-sm">{item.modelo}</div>
+                            <div className="text-xs text-gray-400">{proposalItemPares(item)} pares</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-400 block uppercase">PVP</label>
+                              <input
+                                type="number"
+                                value={item.pvp}
+                                onChange={(e) => updateProposalItem(item.key, { pvp: Number(e.target.value) })}
+                                className="w-24 px-2 py-1 border border-gray-200 dark:border-[#055740] rounded-lg bg-white dark:bg-[#044c38] text-xs font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-gray-400 block uppercase">Margen %</label>
+                              <input
+                                type="number"
+                                value={Math.round(item.margen * 100)}
+                                onChange={(e) => updateProposalItem(item.key, { margen: Number(e.target.value) / 100 })}
+                                className="w-16 px-2 py-1 border border-gray-200 dark:border-[#055740] rounded-lg bg-white dark:bg-[#044c38] text-xs font-bold"
+                              />
+                            </div>
+                            <div className="text-right">
+                              <label className="text-[9px] font-bold text-gray-400 block uppercase">Costo Total</label>
+                              <div className="text-sm font-black text-dfyf-green dark:text-green-400">
+                                ${Math.round(proposalItemCostoNeto(item) * proposalItemPares(item)).toLocaleString("es-CL")}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeProposalItem(item.key)}
+                              className="ml-2 w-7 h-7 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                              title="Quitar"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-[#055740]/40">
+                        <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                          Monto final estimado a pagar por el cliente
+                        </div>
+                        <div className="text-xl font-black text-dfyf-green dark:text-green-400">
+                          ${Math.round(proposalMontoFinal).toLocaleString("es-CL")}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={generateProposalExcel}
+                        disabled={isGeneratingProposalExcel}
+                        className="w-full mt-4 py-3 bg-dfyf-green text-white rounded-xl font-black text-sm hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isGeneratingProposalExcel ? "Generando Excel..." : "⬇ Descargar Propuesta en Excel"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TAB 5: ADMIN PANEL */}
           {activeTab === "admin" && (

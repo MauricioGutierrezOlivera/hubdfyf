@@ -325,6 +325,54 @@ export class ShopifyService implements OnModuleInit {
     return allProducts;
   }
 
+  // Short-lived cache of the full catalog so the Propuestas search box doesn't
+  // trigger a full Shopify sweep on every keystroke.
+  private productsCache: { fetchedAt: number; products: any[] } | null = null;
+  private readonly PRODUCTS_CACHE_TTL_MS = 60 * 1000;
+
+  private async getCachedAllProducts(): Promise<any[]> {
+    const now = Date.now();
+    if (this.productsCache && now - this.productsCache.fetchedAt < this.PRODUCTS_CACHE_TTL_MS) {
+      return this.productsCache.products;
+    }
+    const products = await this.getAllShopifyProducts();
+    this.productsCache = { fetchedAt: now, products };
+    return products;
+  }
+
+  /**
+   * Search active products by (accent-insensitive) name match, for the Propuestas module.
+   * Returns a simplified shape: one entry per product/model, with its size → stock map.
+   */
+  async searchProductsForProposal(query: string): Promise<
+    Array<{
+      id: number;
+      title: string;
+      imageUrl: string | null;
+      price: number;
+      sizes: { size: string; inventoryQuantity: number; inventoryItemId: number }[];
+    }>
+  > {
+    const allProducts = await this.getCachedAllProducts();
+    const needle = this.normalizeString(query);
+
+    const matches = needle
+      ? allProducts.filter((p) => this.normalizeString(p.title).includes(needle))
+      : allProducts;
+
+    return matches.slice(0, 20).map((p) => ({
+      id: p.id,
+      title: p.title,
+      imageUrl: p.images?.[0]?.src || null,
+      price: p.variants?.[0]?.price ? Number(p.variants[0].price) : 0,
+      sizes: (p.variants || []).map((v: any) => ({
+        size: v.title,
+        inventoryQuantity: typeof v.inventory_quantity === 'number' ? v.inventory_quantity : 0,
+        inventoryItemId: v.inventory_item_id,
+      })),
+    }));
+  }
+
   /**
    * Helper method to fetch inventory levels for a list of inventory_item_ids from Shopify Admin REST API.
    * Handles chunking up to 50 inventory_item_ids per HTTP request.
