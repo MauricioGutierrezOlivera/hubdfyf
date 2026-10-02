@@ -467,6 +467,14 @@ export default function AppContainer() {
 
     const isGiftExchange = operationMode === "EXCHANGE" && selectedReturnItem.pricePaid === 0;
 
+    // Si se lleva el mismo modelo (solo cambia la talla), se respeta lo que la clienta
+    // ya pagó por ese modelo, aunque el precio de catálogo haya subido (ej. terminó una oferta).
+    const getEffectivePrice = (it: { productName: string; price: number }) => {
+      if (isGiftExchange) return 0;
+      if (it.productName === selectedReturnItem.productName) return selectedReturnItem.pricePaid;
+      return it.price;
+    };
+
     if (operationMode === "REFUND") {
       const saleDate = new Date(selectedReturnItem.saleDate);
       const daysDiff = Math.floor((Date.now() - saleDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -485,7 +493,7 @@ export default function AppContainer() {
 
     if (operationMode === "EXCHANGE") {
       const returnAmount = selectedReturnItem.pricePaid;
-      const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
+      const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + getEffectivePrice(it) * it.quantity, 0);
       const diff = newItemsTotal - returnAmount;
       if (diff < 0) {
         const proceed = confirm(`⚠️ Atención: El monto de los nuevos calzados ($${newItemsTotal.toLocaleString("es-CL")}) es inferior al calzado devuelto ($${returnAmount.toLocaleString("es-CL")}).\n\n¿Estás segura de continuar? La clienta perderá la diferencia de $${Math.abs(diff).toLocaleString("es-CL")}, ya que en un cambio no se devuelve dinero.`);
@@ -496,7 +504,7 @@ export default function AppContainer() {
     setIsProcessingExchange(true);
     try {
       const returnAmount = selectedReturnItem.pricePaid;
-      const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
+      const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + getEffectivePrice(it) * it.quantity, 0);
       const diff = newItemsTotal - returnAmount;
 
       const body = {
@@ -523,7 +531,7 @@ export default function AppContainer() {
             productId: it.productId,
             quantity: it.quantity,
             price: it.price,
-            discount: isGiftExchange ? it.price : 0,
+            discount: Math.max(0, it.price - getEffectivePrice(it)),
           })) : [])
         ]
       };
@@ -2887,7 +2895,15 @@ export default function AppContainer() {
                   {(() => {
                     const returnAmount = selectedReturnItem.pricePaid;
                     const isGiftExchange = returnAmount === 0;
-                    const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
+                    const getEffectivePrice = (it: { productName: string; price: number }) => {
+                      if (isGiftExchange) return 0;
+                      if (it.productName === selectedReturnItem.productName) return returnAmount;
+                      return it.price;
+                    };
+                    const isSameModelPriceLocked = !isGiftExchange && selectedExchangeItems.some(
+                      it => it.productName === selectedReturnItem.productName && it.price > returnAmount
+                    );
+                    const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + getEffectivePrice(it) * it.quantity, 0);
                     const diff = isGiftExchange ? 0 : newItemsTotal - returnAmount;
                     return (
                       <div className="space-y-4 mt-2">
@@ -2933,6 +2949,12 @@ export default function AppContainer() {
                         {isGiftExchange && (
                           <div className="p-3.5 bg-dfyf-green/10 border border-dfyf-green/20 text-dfyf-green rounded-xl text-xs font-bold">
                             🎁 El calzado devuelto fue entregado como regalo (costo $0), por lo que el calzado nuevo también se entrega sin costo. No se debe cobrar nada a la clienta.
+                          </div>
+                        )}
+
+                        {isSameModelPriceLocked && (
+                          <div className="p-3.5 bg-dfyf-green/10 border border-dfyf-green/20 text-dfyf-green rounded-xl text-xs font-bold">
+                            🏷️ Es solo un cambio de talla del mismo modelo: se respeta el precio original pagado (${returnAmount.toLocaleString("es-CL")}), aunque el modelo ya no tenga el descuento con el que se compró.
                           </div>
                         )}
 
