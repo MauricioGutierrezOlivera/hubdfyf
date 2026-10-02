@@ -527,12 +527,21 @@ export default function AppContainer() {
             price: selectedReturnItem.pricePaid,
             discount: 0,
           },
-          ...(operationMode === "EXCHANGE" ? selectedExchangeItems.map(it => ({
+          ...(operationMode === "EXCHANGE" ? selectedExchangeItems.map(it => isGiftExchange ? {
+            // Regalo: se guarda el precio de catálogo como referencia y se descuenta
+            // completo, igual que el resto de las ventas marcadas como regalo.
             productId: it.productId,
             quantity: it.quantity,
             price: it.price,
-            discount: Math.max(0, it.price - getEffectivePrice(it)),
-          })) : [])
+            discount: it.price,
+          } : {
+            // Mismo modelo (solo cambia la talla): se cobra siempre lo que la clienta
+            // ya pagó por ese modelo, suba o baje el precio de catálogo mientras tanto.
+            productId: it.productId,
+            quantity: it.quantity,
+            price: getEffectivePrice(it),
+            discount: 0,
+          }) : [])
         ]
       };
 
@@ -2901,7 +2910,7 @@ export default function AppContainer() {
                       return it.price;
                     };
                     const isSameModelPriceLocked = !isGiftExchange && selectedExchangeItems.some(
-                      it => it.productName === selectedReturnItem.productName && it.price > returnAmount
+                      it => it.productName === selectedReturnItem.productName && it.price !== returnAmount
                     );
                     const newItemsTotal = selectedExchangeItems.reduce((acc, it) => acc + getEffectivePrice(it) * it.quantity, 0);
                     const diff = isGiftExchange ? 0 : newItemsTotal - returnAmount;
@@ -2954,7 +2963,7 @@ export default function AppContainer() {
 
                         {isSameModelPriceLocked && (
                           <div className="p-3.5 bg-dfyf-green/10 border border-dfyf-green/20 text-dfyf-green rounded-xl text-xs font-bold">
-                            🏷️ Es solo un cambio de talla del mismo modelo: se respeta el precio original pagado (${returnAmount.toLocaleString("es-CL")}), aunque el modelo ya no tenga el descuento con el que se compró.
+                            🏷️ Es solo un cambio de talla del mismo modelo: se respeta siempre el precio original pagado (${returnAmount.toLocaleString("es-CL")}), sin importar si el precio de catálogo subió o bajó desde la compra.
                           </div>
                         )}
 
