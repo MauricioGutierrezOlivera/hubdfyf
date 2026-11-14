@@ -74,3 +74,48 @@ Indicadores acumulados (`GET /finance/summary`):
 - No escribir en Shopify.
 - No cargar datos históricos: la carga inicial de los 8 pedidos y los gastos 2024-2026 la entregará el análisis (archivos CSV en `docs/carga-inicial/`), con un script de importación idempotente `apps/api/scripts/import-finance.ts`.
 - Documentar el módulo en este mismo archivo y agregarlo al mapeo de `.agents/AGENTS.md`.
+
+---
+
+## Implementación (rama `feature/modulo-finanzas`, 2026-11-14)
+
+### Archivos
+| Capa | Ubicación |
+|---|---|
+| Esquema | `apps/api/prisma/schema.prisma` (sección "MÓDULO FINANZAS") |
+| Migración SQL (aditiva + RLS) | `apps/api/prisma/sql/20261114_modulo_finanzas.sql` |
+| Cálculos puros + pruebas | `apps/api/src/finance/finance-calc.ts`, `finance-calc.spec.ts` |
+| API | `apps/api/src/finance/` (`finance.controller.ts`, `finance.service.ts`, `finance-admin.guard.ts`, `finance-storage.service.ts`) |
+| Carga CSV | `apps/api/scripts/import-finance.ts` |
+| Frontend | `apps/web/src/components/finance/` (menú "💰 Finanzas" en `page.tsx`) |
+
+### Acceso
+Solo `SUPER_ADMIN` y `COUNTRY_ADMIN`. **El perfil VISITA no tiene acceso** (decisión de Mauricio, reemplaza lo dicho arriba).
+La API valida el rol en cada ruta con el header `x-user-id` (mismo mecanismo que Propuestas).
+
+### Decisiones tomadas al implementar
+- **Tablas extra:** `CashBalance` (caja real a una fecha, para el hoyo neto). `ImportOrderItem.category` (FOOTWEAR | ACCESSORY | PACKAGING) e `importKey` en costos, modelos, gastos y aportes (idempotencia de la carga CSV).
+- **Prorrateo:** valor de fábrica de cada ítem = EUR unitario × facturados × tipo de cambio del pedido. Los costos no-fábrica (todo menos `FACTORY_INVOICE` e `IMPORT_VAT`) se reparten en proporción a ese valor. El costo total del ítem se divide por los pares **recibidos**. Reproduce el `landed_unit_cost_clp` de la carga inicial con diferencia máxima de 0,5 CLP.
+- **Packaging** participa del prorrateo del pedido (como en la planilla), pero no se vincula a productos ni entra al costo de ventas.
+- **Costo vigente:** promedio ponderado por pares recibidos de los pedidos en estado `RECEIVED`. Coincidencia por nombre: el nombre normalizado del producto debe contener el `modelKey` como palabras completas; si calzan varios, gana el más largo. Las asignaciones manuales (`matchSource = MANUAL`) se aplican a todas las tallas del producto y no se sobreescriben.
+- **Ventas:** todas las ventas no `RETAIL`, cualquier canal (en el código existen ONLINE, OFFLINE y EVENTO; no hay "TIENDA"). Mes según hora de Chile.
+- **Pares vendidos** excluyen calcetines y plantillas (misma regla que los reportes). Su costo sí entra al costo de ventas.
+- **Punto de equilibrio:** gastos fijos del mes / margen bruto unitario promedio de los últimos 3 meses.
+- **Resumen:** se calcula al último mes cerrado. El resultado acumulado parte del primer gasto registrado. "Unidades sin costo" cuenta solo productos activos (los archivados traen stock antiguo de Shopify).
+- **Amortización:** cualquier gasto con `amortizeMonths` se reparte en partes iguales desde su período.
+
+### Endpoints (`/finance`, todos solo Administrador)
+`GET/POST /orders`, `GET/PATCH/DELETE /orders/:id`, `POST /orders/:id/costs`, `PATCH/DELETE /costs/:id`, `POST|GET /costs/:id/document`, `POST /orders/:id/items`, `PATCH/DELETE /items/:id`, `GET /product-costs`, `POST /product-costs/assign|unassign|recompute`, `GET/POST /expenses` (`?from=&to=&category=`), `POST /expenses/duplicate-fixed`, `PATCH/DELETE /expenses/:id`, `POST|GET /expenses/:id/document`, `GET/POST /contributions`, `PATCH/DELETE /contributions/:id`, `GET/POST /cash`, `DELETE /cash/:id`, `GET /monthly?from=YYYY-MM&to=YYYY-MM`, `GET /summary`.
+
+### Documentos
+Bucket privado `finanzas-documentos` (proyecto Supabase `ardbkecvixlqufswdcoa`). Se guarda la ruta interna y se abren con un link firmado de 10 minutos. Variables de la API: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (solo servidor). PDF, imagen o Excel, hasta 15 MB.
+
+### Carga inicial
+Desde `apps/api`: `npx ts-node --transpile-only scripts/import-finance.ts` simula y valida. Con `--apply` escribe. Si la base no es local exige además `--allow-remote`.
+Es idempotente: actualiza las filas `csv:*`, borra las que ya no están en el CSV y no toca lo cargado a mano.
+
+### Paso a producción (requiere aprobación de Mauricio)
+1. Crear el bucket privado `finanzas-documentos` y configurar `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en el hosting de la API.
+2. Aplicar `apps/api/prisma/sql/20261114_modulo_finanzas.sql` en la base de producción. Hacerlo **antes** del deploy, porque el build de la API ejecuta `prisma db push` y crearía las tablas sin RLS.
+3. Deploy de la API y de la web.
+4. Cargar los CSV con `--apply --allow-remote`.

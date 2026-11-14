@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import FinanceSection from "@/components/finance/FinanceSection";
 
 interface Country {
   id: string;
@@ -95,7 +96,7 @@ export default function AppContainer() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeStore, setActiveStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock" | "propuestas">("pos");
+  const [activeTab, setActiveTab] = useState<"pos" | "admin" | "returns" | "customers" | "reports" | "analytics" | "styles" | "stock" | "propuestas" | "finanzas">("pos");
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -1876,6 +1877,16 @@ export default function AppContainer() {
                 }`}
               >
                 <span>📋 Propuestas</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab("finanzas"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold cursor-pointer ${
+                  activeTab === "finanzas"
+                    ? "bg-dfyf-green text-white shadow-md shadow-dfyf-green/20"
+                    : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#055740]"
+                }`}
+              >
+                <span>💰 Finanzas</span>
               </button>
               <button
                 onClick={() => { setActiveTab("admin"); setIsMobileMenuOpen(false); }}
@@ -6221,6 +6232,11 @@ export default function AppContainer() {
         </div>
       );
     })()}
+
+          {/* TAB: FINANZAS (Admin Only, sin perfil Visita) */}
+          {activeTab === "finanzas" && (currentUser.role === "SUPER_ADMIN" || currentUser.role === "COUNTRY_ADMIN") && (
+            <FinanceSection userId={currentUser.id} />
+          )}
 
           {/* TAB: PROPUESTAS (Admin Only) */}
           {activeTab === "propuestas" && (

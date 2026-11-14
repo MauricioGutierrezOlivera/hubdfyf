@@ -16,6 +16,7 @@ Cuando el usuario se refiera a un módulo del sistema utilizando lenguaje común
 | **módulo de devoluciones**, **cambios**, **devoluciones** | [docs/modulo-ventas.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/modulo-ventas.md) |
 | **módulo de usuarios**, **usuarios**, **admin**, **configuracion** | [docs/modulo-usuarios.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/modulo-usuarios.md) |
 | **base de datos**, **modelos**, **tablas**, **prisma** | [docs/base-de-datos.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/base-de-datos.md) |
+| **módulo finanzas**, **finanzas**, **costos**, **gastos**, **pedidos de importación**, **resultado** | [docs/modulo-finanzas.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/modulo-finanzas.md) |
 | **shopify**, **integracion shopify** | [docs/integracion-shopify.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/integracion-shopify.md) |
 | **resumen general**, **arquitectura**, **stack** | [docs/resumen-general.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/resumen-general.md) |
 

@@ -45,3 +45,7 @@ El esquema de datos es compatible con **Prisma 7** y utiliza PostgreSQL.
 ### 9. SalesGoal (Meta de Venta)
 * **Propósito:** Metas mensuales de venta asignadas a cada vendedora.
 * **Constraint:** Único `[userId, month, year]`.
+
+## Módulo Finanzas
+Tablas nuevas (solo aditivas): `ImportOrder`, `ImportOrderCost`, `ImportOrderItem`, `ProductCostLink` (1 por variante de `Product`), `Expense`, `CapitalContribution` y `CashBalance`. Tienen RLS activado.
+Detalle y reglas de cálculo en [modulo-finanzas.md](file:///Users/mauricio/Desktop/ANTIGRAVITY/dfyf-system/docs/modulo-finanzas.md).

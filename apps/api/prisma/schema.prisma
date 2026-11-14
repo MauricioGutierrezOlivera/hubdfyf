@@ -111,6 +111,7 @@ model Product {
 
   inventory   Inventory[]
   saleItems   SaleItem[]
+  costLink    ProductCostLink?
 }
 
 model Inventory {
@@ -178,4 +179,199 @@ model SalesGoal {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, month, year])
+}
+
+// ============================================================
+// MÓDULO FINANZAS (ver docs/modulo-finanzas.md)
+// Montos en CLP sin IVA salvo que el campo diga lo contrario.
+// ============================================================
+
+enum ImportTransport {
+  AIR
+  SEA
+}
+
+enum ImportOrderStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+}
+
+enum ImportCostType {
+  FACTORY_INVOICE
+  FREIGHT
+  INSURANCE
+  CUSTOMS_AGENT
+  DUTIES
+  LOCAL_TRANSPORT
+  BANK_FEES
+  OTHER
+  IMPORT_VAT // Solo informativo (crédito fiscal), nunca suma al costo
+}
+
+enum FinanceCurrency {
+  CLP
+  EUR
+  USD
+}
+
+enum ImportItemCategory {
+  FOOTWEAR
+  ACCESSORY
+  PACKAGING
+}
+
+enum ExpenseCategory {
+  RENT
+  COMMON_EXPENSES
+  SALARIES
+  COMMISSIONS
+  MARKETING
+  ACCOUNTING
+  FRANCHISE_FEE
+  UTILITIES
+  SUPPLIES
+  EVENTS
+  BANK_FEES
+  SHIPPING
+  INSURANCE
+  TAXES_OTHER
+  CAPEX
+  FINANCIAL_COST
+  OTHER
+}
+
+enum ExpenseKind {
+  FIXED
+  VARIABLE
+}
+
+enum CostMatchSource {
+  AUTO   // Asignado por coincidencia de nombre
+  MANUAL // Asignado a mano en "Costos por producto"
+}
+
+model ImportOrder {
+  id          String            @id @default(uuid())
+  code        String            @unique // "P1"
+  name        String
+  season      String?           // "SS25"
+  transport   ImportTransport
+  orderDate   DateTime?
+  arrivalDate DateTime?
+  eurClpRate  Float             // Tipo de cambio de la factura de fábrica
+  status      ImportOrderStatus @default(DRAFT)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  costs       ImportOrderCost[]
+  items       ImportOrderItem[]
+}
+
+model ImportOrderCost {
+  id             String          @id @default(uuid())
+  orderId        String
+  type           ImportCostType
+  supplier       String?
+  documentNumber String?
+  date           DateTime?
+  currency       FinanceCurrency @default(CLP)
+  amount         Float
+  fxRate         Float           @default(1)
+  amountClp      Float           // amount * fxRate
+  vatAmount      Float           @default(0)
+  documentUrl    String?         // Ruta en el bucket privado "finanzas-documentos"
+  notes          String?
+  importKey      String?         @unique // Para que la carga CSV sea idempotente
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  order          ImportOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model ImportOrderItem {
+  id                String             @id @default(uuid())
+  orderId           String
+  category          ImportItemCategory @default(FOOTWEAR)
+  style             String?            // Bailarina, Blucher...
+  model             String?            // "Amatista"
+  color             String?            // "black"
+  modelKey          String             // "amatista black" (minúsculas, sin tildes)
+  quantityInvoiced  Int
+  quantityReceived  Int
+  unitCostEur       Float              // Precio fábrica sin IVA
+  retailPrice       Float?             // PVP con IVA
+  sizeBreakdown     Json?              // {"36":1,"37":2}
+
+  // Recalculados cada vez que cambia el pedido (ver finance-calc.ts)
+  factoryCostClp    Float              @default(0)
+  allocatedExtraClp Float              @default(0)
+  landedUnitCostClp Float              @default(0)
+
+  importKey         String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  order             ImportOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([modelKey])
+}
+
+model ProductCostLink {
+  id          String          @id @default(uuid())
+  productId   String          @unique
+  modelKey    String
+  unitCost    Float           // Promedio ponderado de landedUnitCostClp
+  method      String          @default("WEIGHTED_AVERAGE")
+  matchSource CostMatchSource @default(AUTO)
+  updatedAt   DateTime        @updatedAt
+
+  product     Product         @relation(fields: [productId], references: [id])
+
+  @@index([modelKey])
+}
+
+model Expense {
+  id             String          @id @default(uuid())
+  date           DateTime        // Fecha del documento
+  period         String          // "YYYY-MM" al que se imputa
+  category       ExpenseCategory
+  kind           ExpenseKind     @default(FIXED)
+  supplier       String?
+  description    String
+  amountNet      Float
+  vatAmount      Float           @default(0)
+  paymentMethod  String?
+  documentUrl    String?
+  notes          String?
+  amortizeMonths Int?            // Ej. canon: se muestra prorrateado en el resultado
+  importKey      String?         @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([period])
+}
+
+model CapitalContribution {
+  id        String   @id @default(uuid())
+  date      DateTime
+  partner   String
+  amount    Float
+  notes     String?
+  importKey String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Caja real del negocio en una fecha (input manual para el "hoyo neto")
+model CashBalance {
+  id        String   @id @default(uuid())
+  date      DateTime
+  amount    Float
+  notes     String?
+  createdAt DateTime @default(now())
 }

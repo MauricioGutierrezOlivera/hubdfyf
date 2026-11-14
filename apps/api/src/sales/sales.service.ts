@@ -32,7 +32,7 @@ const GOALS_MAP: Record<number, Record<number, { physical: number; online: numbe
   },
 };
 
-function isProductSockOrAccessory(name: string): boolean {
+export function isProductSockOrAccessory(name: string): boolean {
   const lower = name.toLowerCase();
   
   const hasAccessoryKeyword = 
