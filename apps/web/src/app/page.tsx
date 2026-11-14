@@ -4576,23 +4576,23 @@ export default function AppContainer() {
               <div className="h-full overflow-y-auto pr-2 pb-12">
                 <div className="space-y-6">
                   {/* Top Bar: Title & Period Filters */}
-                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-5 shadow-sm space-y-4">
-                    <div className="flex flex-wrap justify-between items-center gap-4 border-b border-gray-100 dark:border-[#055740] pb-3">
+                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 dark:border-[#055740] pb-3">
                       <div>
-                        <h2 className="text-xl font-black text-gray-900 dark:text-white">Análisis Ventas</h2>
+                        <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">Análisis Ventas</h2>
                         <p className="text-xs text-gray-400 font-bold mt-0.5">
                           Métricas gráficas y tendencias vectoriales por canal de venta
                         </p>
                       </div>
 
-                      {/* Filter Controls: Desde / Hasta */}
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-[#022c20]/40 p-1.5 rounded-2xl border border-gray-200/70 dark:border-[#055740]/40">
-                          <span className="text-xs font-black text-gray-500 pl-1">Desde:</span>
+                      {/* Filter Controls: Desde / Hasta & Presets */}
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-[#022c20]/40 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-gray-200/70 dark:border-[#055740]/40">
+                          <span className="text-[11px] sm:text-xs font-black text-gray-500 pl-1">Desde:</span>
                           <select
                             value={analyticsFromYear}
                             onChange={(e) => setAnalyticsFromYear(parseInt(e.target.value))}
-                            className="border border-gray-200 dark:border-[#055740] rounded-xl px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-8 cursor-pointer"
+                            className="border border-gray-200 dark:border-[#055740] rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-7 sm:h-8 cursor-pointer"
                           >
                             <option value="2025">2025</option>
                             <option value="2026">2026</option>
@@ -4600,7 +4600,7 @@ export default function AppContainer() {
                           <select
                             value={analyticsFromMonth}
                             onChange={(e) => setAnalyticsFromMonth(parseInt(e.target.value))}
-                            className="border border-gray-200 dark:border-[#055740] rounded-xl px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-8 cursor-pointer"
+                            className="border border-gray-200 dark:border-[#055740] rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-7 sm:h-8 cursor-pointer"
                           >
                             <option value="1">Ene</option>
                             <option value="2">Feb</option>
@@ -4617,12 +4617,12 @@ export default function AppContainer() {
                           </select>
                         </div>
 
-                        <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-[#022c20]/40 p-1.5 rounded-2xl border border-gray-200/70 dark:border-[#055740]/40">
-                          <span className="text-xs font-black text-gray-500 pl-1">Hasta:</span>
+                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-[#022c20]/40 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-gray-200/70 dark:border-[#055740]/40">
+                          <span className="text-[11px] sm:text-xs font-black text-gray-500 pl-1">Hasta:</span>
                           <select
                             value={analyticsToYear}
                             onChange={(e) => setAnalyticsToYear(parseInt(e.target.value))}
-                            className="border border-gray-200 dark:border-[#055740] rounded-xl px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-8 cursor-pointer"
+                            className="border border-gray-200 dark:border-[#055740] rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-7 sm:h-8 cursor-pointer"
                           >
                             <option value="2025">2025</option>
                             <option value="2026">2026</option>
@@ -4630,7 +4630,7 @@ export default function AppContainer() {
                           <select
                             value={analyticsToMonth}
                             onChange={(e) => setAnalyticsToMonth(parseInt(e.target.value))}
-                            className="border border-gray-200 dark:border-[#055740] rounded-xl px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-8 cursor-pointer"
+                            className="border border-gray-200 dark:border-[#055740] rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 text-xs bg-white dark:bg-[#033b2b] text-gray-900 dark:text-white font-bold h-7 sm:h-8 cursor-pointer"
                           >
                             <option value="1">Ene</option>
                             <option value="2">Feb</option>
@@ -4654,7 +4654,7 @@ export default function AppContainer() {
                               setAnalyticsFromYear(2025); setAnalyticsFromMonth(1);
                               setAnalyticsToYear(2025); setAnalyticsToMonth(12);
                             }}
-                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
+                            className="px-2 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
                           >
                             2025
                           </button>
@@ -4663,7 +4663,7 @@ export default function AppContainer() {
                               setAnalyticsFromYear(2026); setAnalyticsFromMonth(1);
                               setAnalyticsToYear(2026); setAnalyticsToMonth(12);
                             }}
-                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
+                            className="px-2 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
                           >
                             2026
                           </button>
@@ -4672,7 +4672,7 @@ export default function AppContainer() {
                               setAnalyticsFromYear(2025); setAnalyticsFromMonth(1);
                               setAnalyticsToYear(2026); setAnalyticsToMonth(12);
                             }}
-                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
+                            className="px-2 py-1 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-[#055740] hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors"
                           >
                             Todo
                           </button>
@@ -4680,74 +4680,74 @@ export default function AppContainer() {
                       </div>
                     </div>
 
-                    {/* Summary Cards Row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
-                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Monto Total Periodo</span>
-                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.totalAmount || 0).toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{monthlyData.length} meses seleccionados</span>
+                    {/* Summary Cards Row (Totaleras) - Responsive 2x2 on Mobile, 4x1 on Desktop */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-3 sm:p-4">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Monto Total Periodo</span>
+                        <span className="text-base sm:text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.totalAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 mt-0.5 block">{monthlyData.length} meses</span>
                       </div>
 
-                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Ventas ONLINE</span>
-                        <span className="text-2xl font-black text-amber-600 dark:text-amber-400 block mt-0.5">${(summary.onlineAmount || 0).toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctOnline}% del total ({summary.onlineUnits || 0} pares)</span>
+                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-3 sm:p-4">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Ventas ONLINE</span>
+                        <span className="text-base sm:text-2xl font-black text-amber-600 dark:text-amber-400 block mt-0.5">${(summary.onlineAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 mt-0.5 block">{pctOnline}% ({summary.onlineUnits || 0} pares)</span>
                       </div>
 
-                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Tienda Física / Resto</span>
-                        <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">${(summary.physicalAmount || 0).toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">{pctPhysical}% del total ({summary.physicalUnits || 0} pares)</span>
+                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-3 sm:p-4">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Tienda Física / Resto</span>
+                        <span className="text-base sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">${(summary.physicalAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 mt-0.5 block">{pctPhysical}% ({summary.physicalUnits || 0} pares)</span>
                       </div>
 
-                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-4">
-                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Promedio Mensual</span>
-                        <span className="text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.averageMonthlyAmount || 0).toLocaleString("es-CL")}</span>
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">Total pares: {summary.totalUnits || 0} pares</span>
+                      <div className="bg-[#F9FAFB] dark:bg-[#022c20]/40 border border-gray-200/70 dark:border-[#055740]/40 rounded-2xl p-3 sm:p-4">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Promedio Mensual</span>
+                        <span className="text-base sm:text-2xl font-black text-gray-950 dark:text-white block mt-0.5">${(summary.averageMonthlyAmount || 0).toLocaleString("es-CL")}</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 mt-0.5 block">Total: {summary.totalUnits || 0} pares</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Dynamic Vector Chart Card */}
-                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl p-6 shadow-sm space-y-4">
-                    <div className="flex flex-wrap justify-between items-center gap-4">
+                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-black text-gray-900 dark:text-white">Monto de Ventas por Mes</h3>
-                        <p className="text-xs text-gray-400 font-bold">Gráfico dinámico de barras apiladas y curva vectorial de comportamiento total</p>
+                        <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Monto de Ventas por Mes</h3>
+                        <p className="text-[11px] sm:text-xs text-gray-400 font-bold">Gráfico dinámico de barras apiladas y curva vectorial de comportamiento total</p>
                       </div>
 
                       {/* Chart Legend */}
-                      <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs font-bold">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-3 h-3 rounded-sm bg-emerald-500"></span>
-                          <span className="text-gray-700 dark:text-gray-300">Tienda Física / Resto</span>
+                          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
+                          <span className="text-gray-700 dark:text-gray-300">Tienda Física</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-3 h-3 rounded-sm bg-amber-500"></span>
-                          <span className="text-gray-700 dark:text-gray-300">Canal ONLINE</span>
+                          <span className="w-2.5 h-2.5 rounded-sm bg-amber-500"></span>
+                          <span className="text-gray-700 dark:text-gray-300">ONLINE</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-3.5 h-1 bg-dfyf-green rounded-full"></span>
-                          <span className="text-gray-700 dark:text-gray-300">Curva Vectorial (Total)</span>
+                          <span className="w-3 h-1 bg-dfyf-green rounded-full"></span>
+                          <span className="text-gray-700 dark:text-gray-300">Total</span>
                         </div>
                       </div>
                     </div>
 
                     {/* SVG Chart Renderer */}
                     {isLoadingAnalytics ? (
-                      <div className="h-[360px] flex items-center justify-center text-gray-400 font-bold text-sm">
+                      <div className="h-[280px] sm:h-[360px] flex items-center justify-center text-gray-400 font-bold text-sm">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-dfyf-green mr-3"></div>
                         <span>Cargando análisis dinámico...</span>
                       </div>
                     ) : monthlyData.length === 0 ? (
-                      <div className="h-[360px] flex items-center justify-center text-gray-400 font-bold text-sm">
+                      <div className="h-[280px] sm:h-[360px] flex items-center justify-center text-gray-400 font-bold text-sm">
                         No hay datos de ventas para el periodo seleccionado.
                       </div>
                     ) : (
-                      <div className="relative overflow-x-auto">
+                      <div className="relative overflow-x-auto rounded-xl pb-2">
                         <svg
                           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                          className="w-full h-auto min-w-[700px] select-none"
+                          className="w-full h-auto min-w-[550px] sm:min-w-[700px] select-none"
                         >
                           {/* Y-Axis Gridlines & Labels */}
                           {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
@@ -4797,6 +4797,7 @@ export default function AppContainer() {
                                 className="cursor-pointer transition-opacity"
                                 onMouseEnter={() => setHoveredAnalyticsMonth(idx)}
                                 onMouseLeave={() => setHoveredAnalyticsMonth(null)}
+                                onClick={() => setHoveredAnalyticsMonth(hoveredAnalyticsMonth === idx ? null : idx)}
                               >
                                 {/* Column hover highlight background */}
                                 <rect
@@ -4892,10 +4893,15 @@ export default function AppContainer() {
                           const mPctPhysical = m.totalAmount > 0 ? ((m.physicalAmount / m.totalAmount) * 100).toFixed(1) : "0";
 
                           return (
-                            <div className="absolute top-2 right-4 bg-gray-950/90 text-white p-3.5 rounded-2xl shadow-xl border border-white/10 text-xs backdrop-blur-md z-20 space-y-1.5 min-w-[220px]">
+                            <div className="absolute top-2 right-2 sm:right-4 bg-gray-950/95 text-white p-3 sm:p-3.5 rounded-2xl shadow-xl border border-white/10 text-xs backdrop-blur-md z-20 space-y-1.5 min-w-[200px] sm:min-w-[220px]">
                               <div className="flex justify-between items-center border-b border-white/15 pb-1 font-black">
                                 <span>📅 {m.fullMonthLabel}</span>
-                                <span className="text-[10px] text-green-400 font-bold">Detalle Mensual</span>
+                                <button 
+                                  onClick={() => setHoveredAnalyticsMonth(null)}
+                                  className="text-[10px] text-gray-400 hover:text-white font-bold ml-2"
+                                >
+                                  ✕
+                                </button>
                               </div>
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-300">Monto Total:</span>
@@ -4920,23 +4926,26 @@ export default function AppContainer() {
                     )}
                   </div>
 
-                  {/* Monthly Audit Table */}
-                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-3xl overflow-hidden shadow-sm">
-                    <div className="p-4 border-b border-gray-100 dark:border-[#055740] flex justify-between items-center">
-                      <h3 className="text-md font-black text-gray-900 dark:text-white">Desglose Numérico por Mes</h3>
-                      <span className="text-xs text-gray-400 font-bold">{monthlyData.length} registros</span>
+                  {/* Monthly Audit Table - Streamlined for Mobile */}
+                  <div className="bg-white dark:bg-[#033b2b] border border-gray-200 dark:border-[#055740] rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+                    <div className="p-3.5 sm:p-4 border-b border-gray-100 dark:border-[#055740] flex justify-between items-center">
+                      <div>
+                        <h3 className="text-sm sm:text-md font-black text-gray-900 dark:text-white">Desglose Numérico por Mes</h3>
+                        <p className="text-[10px] sm:text-xs text-gray-400 md:hidden font-medium">Muestra Total Venta, % Online y Pares</p>
+                      </div>
+                      <span className="text-xs text-gray-400 font-bold">{monthlyData.length} meses</span>
                     </div>
 
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead className="bg-gray-50 dark:bg-[#022c20]/50 text-gray-400 font-bold uppercase tracking-wider border-b border-gray-100 dark:border-[#055740]">
                           <tr>
-                            <th className="p-3 pl-5">Mes / Período</th>
-                            <th className="p-3 text-right">Monto Total</th>
-                            <th className="p-3 text-right text-emerald-600 dark:text-emerald-400">Tienda Física</th>
-                            <th className="p-3 text-right text-amber-600 dark:text-amber-400">Canal ONLINE</th>
-                            <th className="p-3 text-right">% ONLINE</th>
-                            <th className="p-3 text-right pr-5">Pares Vendidos</th>
+                            <th className="p-2.5 sm:p-3 pl-3 sm:pl-5">Mes</th>
+                            <th className="p-2.5 sm:p-3 text-right">Total Venta</th>
+                            <th className="hidden md:table-cell p-3 text-right text-emerald-600 dark:text-emerald-400">Tienda Física</th>
+                            <th className="hidden md:table-cell p-3 text-right text-amber-600 dark:text-amber-400">Canal ONLINE</th>
+                            <th className="p-2.5 sm:p-3 text-right text-amber-600 dark:text-amber-400">% Online</th>
+                            <th className="p-2.5 sm:p-3 text-right pr-3 sm:pr-5">Pares</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-[#055740]/30 font-medium">
@@ -4952,13 +4961,14 @@ export default function AppContainer() {
                                 className="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors cursor-pointer"
                                 onMouseEnter={() => setHoveredAnalyticsMonth(idx)}
                                 onMouseLeave={() => setHoveredAnalyticsMonth(null)}
+                                onClick={() => setHoveredAnalyticsMonth(hoveredAnalyticsMonth === idx ? null : idx)}
                               >
-                                <td className="p-3 pl-5 font-black text-gray-900 dark:text-white">{m?.fullMonthLabel || ""}</td>
-                                <td className="p-3 text-right font-black text-gray-950 dark:text-white">${totAmt.toLocaleString("es-CL")}</td>
-                                <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">${phyAmt.toLocaleString("es-CL")}</td>
-                                <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">${onlAmt.toLocaleString("es-CL")}</td>
-                                <td className="p-3 text-right font-bold text-gray-500">{rowPctOnline}%</td>
-                                <td className="p-3 text-right pr-5 font-bold">{totUnits} pares</td>
+                                <td className="p-2.5 sm:p-3 pl-3 sm:pl-5 font-black text-gray-900 dark:text-white text-xs sm:text-sm">{m?.fullMonthLabel || ""}</td>
+                                <td className="p-2.5 sm:p-3 text-right font-black text-gray-950 dark:text-white text-xs sm:text-sm">${totAmt.toLocaleString("es-CL")}</td>
+                                <td className="hidden md:table-cell p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">${phyAmt.toLocaleString("es-CL")}</td>
+                                <td className="hidden md:table-cell p-3 text-right font-bold text-amber-600 dark:text-amber-400">${onlAmt.toLocaleString("es-CL")}</td>
+                                <td className="p-2.5 sm:p-3 text-right font-bold text-amber-600 dark:text-amber-400">{rowPctOnline}%</td>
+                                <td className="p-2.5 sm:p-3 text-right pr-3 sm:pr-5 font-bold text-gray-800 dark:text-gray-200">{totUnits} p.</td>
                               </tr>
                             );
                           })}

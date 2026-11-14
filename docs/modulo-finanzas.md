@@ -1,0 +1,76 @@
+# Módulo Finanzas — Costos de importación, gastos y resultado
+
+Especificación funcional y técnica. Objetivo: medir el resultado real del negocio (por par, por pedido y por mes) para decidir si continuar. Solo perfil Administrador (SUPER_ADMIN / COUNTRY_ADMIN). El perfil VISITA solo lectura.
+
+## Principios contables (no negociables)
+1. **IVA fuera de todo costo y venta.** El IVA de importación y el IVA de gastos se recuperan en el F29: se registran aparte (campo `vatAmount`) y nunca suman al costo. Ventas siempre netas: `neto = total / 1.19`.
+2. **La mercadería no es gasto al pagarla.** Al llegar un pedido entra a inventario valorizado; pasa a costo solo cuando se vende (costo de ventas).
+3. **Cada peso se cuenta una vez.** Aportes de capital de los socios = inversión (no ingreso). Cuotas de créditos personales con que se financiaron los aportes = NO son gasto del negocio. Intereses de esos créditos se registran como "Costo financiero" en categoría aparte, mostrado bajo el resultado operacional.
+4. **Inversión de apertura (obra, muebles, letrero, garantía) = CAPEX**, separada del gasto operacional mensual.
+5. Ventas de Paris y Falabella (mayorista) quedan FUERA del módulo por ahora.
+
+## Modelo de datos (Prisma, solo tablas nuevas; no modificar tablas existentes salvo agregar campos opcionales)
+
+### ImportOrder (Pedido de importación)
+id, code (ej. "P1"), name (ej. "Pedido 1 - Barco Febrero 2025"), season (ej. "SS25"), transport enum AIR|SEA, orderDate, arrivalDate, eurClpRate (tipo de cambio usado para la factura de fábrica), status enum DRAFT|IN_TRANSIT|RECEIVED, notes, createdAt.
+
+### ImportOrderCost (Costos del pedido)
+id, orderId, type enum: FACTORY_INVOICE | FREIGHT | INSURANCE | CUSTOMS_AGENT | DUTIES | LOCAL_TRANSPORT | BANK_FEES | OTHER | IMPORT_VAT,
+supplier, documentNumber, date, currency enum CLP|EUR|USD, amount, fxRate, amountClp (calculado = amount * fxRate), vatAmount, documentUrl (Supabase Storage), notes.
+- IMPORT_VAT se guarda pero se EXCLUYE del costo (solo informativo / crédito fiscal).
+
+### ImportOrderItem (Detalle de modelos del pedido)
+id, orderId, style (Bailarina, Blucher…), model (ej. "Amatista"), color (ej. "black"), modelKey (normalizado: minúsculas, sin tildes, "amatista black"), quantityInvoiced, quantityReceived, unitCostEur (precio fábrica sin IVA), retailPrice (PVP con IVA), sizeBreakdown Json opcional ({"36":1,"37":2,...}).
+Campos calculados (vista o columnas recalculadas al guardar):
+- factoryCostClp = unitCostEur * order.eurClpRate
+- allocatedExtraClp = (factoryValueItem / factoryValueTotalPedido) * sumaCostosNoFábricaSinIVA / quantityReceived  → **prorrateo por valor de fábrica**
+- landedUnitCostClp = factoryCostClp + allocatedExtraClp
+- Diferencias factura vs cajas: si quantityReceived < quantityInvoiced, el costo total del ítem se reparte entre los pares recibidos.
+
+### ProductCostLink (vínculo variante Shopify ↔ modelo importado)
+id, productId (→ Product), modelKey, unitCost (costo vigente), method = WEIGHTED_AVERAGE, updatedAt.
+- Costo vigente = **promedio ponderado** del landedUnitCostClp de todos los pedidos recibidos de ese modelKey, ponderado por pares recibidos.
+- Matching: Product.name normalizado contiene el modelKey (ej. "Bailarina Amatista Turquesa" → "amatista turquesa"). Pantalla para revisar productos sin match y asignarlos manualmente.
+
+### Expense (Gasto)
+id, date (fecha documento), period (YYYY-MM al que se imputa), category enum:
+RENT | COMMON_EXPENSES | SALARIES | COMMISSIONS | MARKETING | ACCOUNTING | FRANCHISE_FEE (canon) | UTILITIES (internet, teléfono) | SUPPLIES | EVENTS | BANK_FEES | SHIPPING (ShipIt, despachos) | INSURANCE | TAXES_OTHER (patente) | CAPEX | FINANCIAL_COST | OTHER,
+kind enum FIXED|VARIABLE, supplier, description, amountNet, vatAmount, paymentMethod, documentUrl, notes.
+- Canon: se registra el pago real y además se puede marcar `amortizeMonths` (opcional) para mostrarlo prorrateado en el resultado.
+
+### CapitalContribution (Aporte de socios)
+id, date, partner, amount, notes.
+
+### Storage
+Bucket privado `finanzas-documentos` en Supabase Storage. Subida de PDF/imagen/xlsx desde los formularios de costo y gasto. (La lectura automática de facturas con IA queda para una fase posterior: por ahora el usuario sube el documento y escribe los montos.)
+
+## Cálculos del resultado mensual (endpoint `GET /finance/monthly?from=&to=`)
+Por mes (period):
+- **Ventas netas** = Σ Sale.total / 1.19 (tipos NORMAL y EXCHANGE; excluir RETAIL; incluir canales ONLINE, OFFLINE, TIENDA, EVENTO).
+- **Pares vendidos** = Σ SaleItem.quantity (negativos restan).
+- **Costo de ventas** = Σ SaleItem.quantity × ProductCostLink.unitCost. Ítems sin costo vinculado: contar y reportar como "pares sin costo" (no inventar).
+- **Margen bruto** y % sobre ventas netas.
+- **Gastos operacionales** = Σ Expense.amountNet del período, excepto CAPEX y FINANCIAL_COST (canon según amortización si está definida).
+- **Resultado operacional** = margen bruto − gastos operacionales.
+- **Costo financiero** y **resultado después de financiamiento**.
+- **Promedio móvil 3 meses** del resultado operacional y su tendencia (pendiente).
+- **Punto de equilibrio en pares** = gastos fijos del mes / margen bruto unitario promedio.
+
+Indicadores acumulados (`GET /finance/summary`):
+- Aportes acumulados, CAPEX acumulado, stock valorizado actual (Σ Inventory.quantity × unitCost), resultado operacional acumulado.
+- **Hoyo neto** = aportes acumulados − caja actual (input manual) − stock valorizado.
+- **Meses para recuperar** = hoyo neto / promedio móvil 3m (si positivo; si es negativo mostrar "no se recupera al ritmo actual").
+
+## Pantallas (nueva sección "Finanzas" en el menú, solo admin)
+1. **Pedidos**: lista con código, temporada, transporte, pares, costo total sin IVA, costo promedio por par. Detalle con dos pestañas: *Costos* (formulario + adjuntos) y *Modelos* (tabla editable + costo puesto en tienda por par calculado + margen vs PVP neto).
+2. **Gastos**: lista por mes filtrable por categoría, formulario simple, adjunto, botón "duplicar gastos fijos del mes anterior".
+3. **Aportes**: lista y formulario.
+4. **Resultado**: tabla mensual (filas = conceptos, columnas = meses) + gráfico de resultado operacional mensual con promedio móvil 3m + tarjetas: punto de equilibrio en pares vs pares reales del mes, hoyo neto, meses para recuperar.
+5. **Costos por producto**: productos sin costo vinculado y asignación manual.
+
+## Reglas de implementación
+- Trabajar en rama `feature/modulo-finanzas`.
+- Migración Prisma solo aditiva. Probar primero en base local. **No aplicar en producción sin aprobación explícita de Mauricio.**
+- No escribir en Shopify.
+- No cargar datos históricos: la carga inicial de los 8 pedidos y los gastos 2024-2026 la entregará el análisis (archivos CSV en `docs/carga-inicial/`), con un script de importación idempotente `apps/api/scripts/import-finance.ts`.
+- Documentar el módulo en este mismo archivo y agregarlo al mapeo de `.agents/AGENTS.md`.
