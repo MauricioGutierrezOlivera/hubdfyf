@@ -1,6 +1,7 @@
 import {
   addMonths,
   breakEvenPairs,
+  buildInstallments,
   computeItemCosts,
   expensesByPeriod,
   linearSlope,
@@ -10,6 +11,7 @@ import {
   normalizeKey,
   periodOf,
   periodRange,
+  projectCashFlow,
   weightedAverageByModel,
 } from './finance-calc';
 
@@ -133,5 +135,34 @@ describe('finance-calc', () => {
     expect(monthsToRecover(1_000_000, 250_000)).toBe(4);
     expect(monthsToRecover(1_000_000, -10)).toBeNull();
     expect(monthsToRecover(-5, 10)).toBe(0);
+  });
+
+  it('divide la factura de fábrica en 40/30/30 y las cuotas suman exacto', () => {
+    const plan = buildInstallments(new Date('2026-09-15T12:00:00Z'), 53071, 55336861);
+    expect(plan.map((p) => p.percent)).toEqual([0.4, 0.3, 0.3]);
+    expect(plan.map((p) => p.dueDate.toISOString().slice(0, 10))).toEqual(['2026-09-15', '2026-10-15', '2026-11-14']);
+    expect(plan.reduce((s, p) => s + p.amountClp, 0)).toBe(55336861);
+    expect(plan.reduce((s, p) => s + p.amountEur!, 0)).toBeCloseTo(53071, 2);
+  });
+
+  it('proyecta la caja: prorratea el primer mes y ubica cobros, pagos y vencidos', () => {
+    const { months, beyond } = projectCashFlow({
+      startDate: new Date('2026-11-16T12:00:00Z'), // quedan 15 de 30 días
+      startCash: 29_000_000,
+      months: 2,
+      monthlySales: 10_000_000,
+      monthlyExpenses: 6_000_000,
+      inflows: [{ date: new Date('2026-11-06T12:00:00Z'), amount: 1_000_000, label: 'vencido' }],
+      outflows: [
+        { date: new Date('2026-12-10T12:00:00Z'), amount: 17_700_000, label: 'cuota 3' },
+        { date: new Date('2027-03-01T12:00:00Z'), amount: 5, label: 'lejos' },
+      ],
+    });
+    expect(months[0].fraction).toBe(0.5);
+    expect(months[0].inflows[0].overdue).toBe(true);
+    expect(months[0].closing).toBe(29_000_000 + 5_000_000 - 3_000_000 + 1_000_000);
+    expect(months[1].outflows.map((o) => o.label)).toEqual(['cuota 3']);
+    expect(months[1].closing).toBe(months[0].closing + 4_000_000 - 17_700_000);
+    expect(beyond.outflows).toBe(5);
   });
 });

@@ -16,6 +16,7 @@ import {
   IVA_RATE,
   addMonths,
   breakEvenPairs,
+  buildInstallments,
   computeItemCosts,
   expensesByPeriod,
   extraCostsClp,
@@ -27,6 +28,7 @@ import {
   normalizeKey,
   periodOf,
   periodRange,
+  projectCashFlow,
   weightedAverageByModel,
 } from './finance-calc';
 import { FinanceStorageService, UploadedDocument } from './finance-storage.service';
@@ -43,6 +45,9 @@ const EXPENSE_CATEGORIES = Object.values(ExpenseCategory);
 const EXPENSE_KINDS = Object.values(ExpenseKind);
 
 const round = (n: number) => Math.round(n);
+
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const periodLabelEs = (p?: string) => (p ? `${MONTHS_ES[Number(p.slice(5)) - 1]} ${p.slice(0, 4)}` : '—');
 
 type DocumentKind = 'cost' | 'expense' | 'wholesale';
 
@@ -744,6 +749,8 @@ export class FinanceService {
       period: period ?? undefined,
       vatAmount: num(body, 'vatAmount', { min: 0 }),
       notes: str(body, 'notes'),
+      dueDate: date(body, 'dueDate'),
+      paidAt: date(body, 'paidAt'),
     });
   }
 
@@ -809,6 +816,150 @@ export class FinanceService {
       select: { id: true },
     });
     if (dup) throw new BadRequestException(`La factura ${invoiceNumber} de ${customer} ya está registrada`);
+  }
+
+  // ============================================================
+  // Flujo de caja: cuotas de importación, cobros y proyección
+  // ============================================================
+
+  /** Pedidos con su factura de fábrica y sus cuotas (pagadas o no). */
+  async listPayments() {
+    const orders = await this.prisma.importOrder.findMany({
+      orderBy: { code: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        eurClpRate: true,
+        costs: { where: { type: 'FACTORY_INVOICE' }, select: { amount: true, currency: true, amountClp: true, date: true } },
+        payments: { orderBy: { installment: 'asc' } },
+      },
+    });
+    return orders.map(({ costs, ...o }) => ({
+      ...o,
+      factoryEur: costs.filter((c) => c.currency === 'EUR').reduce((s, c) => s + c.amount, 0),
+      factoryClp: round(costs.reduce((s, c) => s + c.amountClp, 0)),
+      factoryInvoiceDate: costs.find((c) => c.date)?.date ?? null,
+    }));
+  }
+
+  /**
+   * Genera las cuotas 40/30/30 de la factura de fábrica desde la fecha de la factura de España.
+   * Con `fxRate` estima los CLP al tipo de cambio indicado (el real se conoce al pagar).
+   */
+  async generatePayments(orderId: string, body: Body) {
+    await this.ensureOrder(orderId);
+    const invoiceDate = date(body, 'invoiceDate', { required: true })!;
+    const fxRate = num(body, 'fxRate', { min: 0 });
+    const [costs, existing] = await Promise.all([
+      this.prisma.importOrderCost.findMany({ where: { orderId, type: 'FACTORY_INVOICE' } }),
+      this.prisma.importPayment.findMany({ where: { orderId } }),
+    ]);
+    if (!costs.length) throw new BadRequestException('El pedido no tiene factura de fábrica');
+    if (existing.some((p) => p.paidAt)) {
+      throw new BadRequestException('El pedido ya tiene cuotas pagadas: edítalas una a una');
+    }
+    const eur = costs.every((c) => c.currency === 'EUR') ? costs.reduce((s, c) => s + c.amount, 0) : null;
+    const clp = fxRate && eur !== null ? eur * fxRate : costs.reduce((s, c) => s + c.amountClp, 0);
+    const plan = buildInstallments(invoiceDate, eur, Math.round(clp));
+    await this.prisma.$transaction([
+      this.prisma.importPayment.deleteMany({ where: { orderId } }),
+      this.prisma.importPayment.createMany({ data: plan.map((p) => ({ ...p, orderId })) }),
+      // La fecha de la factura de España queda registrada en el costo de fábrica
+      this.prisma.importOrderCost.updateMany({ where: { orderId, type: 'FACTORY_INVOICE', date: null }, data: { date: invoiceDate } }),
+    ]);
+    return this.prisma.importPayment.findMany({ where: { orderId }, orderBy: { installment: 'asc' } });
+  }
+
+  async updatePayment(id: string, body: Body) {
+    const current = await this.prisma.importPayment.findUnique({ where: { id }, select: { id: true } });
+    if (!current) throw new NotFoundException('Cuota no encontrada');
+    return this.prisma.importPayment.update({
+      where: { id },
+      data: compact({
+        dueDate: date(body, 'dueDate') ?? undefined,
+        amountClp: num(body, 'amountClp', { min: 0 }),
+        paidAt: date(body, 'paidAt'),
+        paidAmountClp: body.paidAmountClp === null || body.paidAmountClp === '' ? null : num(body, 'paidAmountClp', { min: 0 }),
+        notes: str(body, 'notes'),
+      }),
+    });
+  }
+
+  async deletePayments(orderId: string) {
+    const paid = await this.prisma.importPayment.count({ where: { orderId, paidAt: { not: null } } });
+    if (paid) throw new BadRequestException('El pedido tiene cuotas pagadas: no se pueden borrar');
+    await this.prisma.importPayment.deleteMany({ where: { orderId } });
+    return { ok: true };
+  }
+
+  /**
+   * Proyección de caja desde el último saldo registrado. Supuestos mensuales por defecto:
+   * promedio de los últimos 3 meses cerrados (ventas de tiendas y gastos operacionales + financieros).
+   */
+  async cashflow(query: { months?: string; monthlySales?: string; monthlyExpenses?: string }) {
+    const months = Math.min(Math.max(Number(query.months) || 6, 1), 24);
+    const lastClosed = addMonths(periodOf(new Date()), -1);
+    const [cash, history, payments, wholesale] = await Promise.all([
+      this.prisma.cashBalance.findFirst({ orderBy: { date: 'desc' } }),
+      this.computeMonthly(addMonths(lastClosed, -2), lastClosed),
+      this.prisma.importPayment.findMany({ include: { order: { select: { code: true } } } }),
+      this.prisma.wholesaleSale.findMany({ include: { lines: { select: { quantity: true, unitPriceNet: true } } } }),
+    ]);
+    const avg = (f: (r: MonthlyRow) => number) => history.reduce((s, r) => s + f(r), 0) / (history.length || 1);
+    const parse = (v?: string) => (v === undefined || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+    const assumptions = {
+      basis: `Promedio ${periodLabelEs(history[0]?.period)} a ${periodLabelEs(lastClosed)}`,
+      monthlySales: parse(query.monthlySales) ?? round(avg((r) => r.retailSales)),
+      monthlyExpenses: parse(query.monthlyExpenses) ?? round(avg((r) => r.operatingExpenses + r.financialCost)),
+      defaultSales: round(avg((r) => r.retailSales)),
+      defaultExpenses: round(avg((r) => r.operatingExpenses + r.financialCost)),
+    };
+    const startDate = cash?.date ?? new Date();
+    // Pendiente = no pagado, o pagado después de la foto de caja (ese movimiento no está en el saldo)
+    const pending = (paidAt: Date | null) => !paidAt || paidAt > startDate;
+    const outflows = payments
+      .filter((p) => pending(p.paidAt))
+      .map((p) => ({ date: p.dueDate, amount: p.paidAmountClp ?? p.amountClp, label: `${p.order.code} cuota ${p.installment} (${Math.round(p.percent * 100)}%)` }));
+    const inflows = wholesale
+      .filter((w) => pending(w.paidAt))
+      .map((w) => ({
+        date: w.dueDate ?? new Date(w.date.getTime() + 30 * 86_400_000),
+        amount: w.lines.reduce((s, l) => s + l.quantity * l.unitPriceNet, 0),
+        label: `${w.customer} factura N°${w.invoiceNumber}`,
+      }));
+    const projection = projectCashFlow({ startDate, startCash: cash?.amount ?? 0, months, monthlySales: assumptions.monthlySales, monthlyExpenses: assumptions.monthlyExpenses, inflows, outflows });
+    const rows = projection.months.map((m) => ({
+      ...m,
+      opening: round(m.opening),
+      sales: round(m.sales),
+      expenses: round(m.expenses),
+      closing: round(m.closing),
+      inflows: m.inflows.map((x) => ({ ...x, amount: round(x.amount) })),
+      outflows: m.outflows.map((x) => ({ ...x, amount: round(x.amount) })),
+    }));
+    const lowest = rows.reduce((min, r) => (r.closing < min.closing ? r : min), rows[0]);
+    const ordersWithoutPlan = await this.prisma.importOrder.count({ where: { payments: { none: {} }, status: { not: 'RECEIVED' } } });
+    return {
+      start: { date: startDate, amount: cash ? round(cash.amount) : null },
+      assumptions,
+      rows,
+      lowest: lowest ? { period: lowest.period, closing: lowest.closing } : null,
+      beyond: { inflows: round(projection.beyond.inflows), outflows: round(projection.beyond.outflows) },
+      pendingTotals: {
+        receivables: round(inflows.reduce((s, x) => s + x.amount, 0)),
+        installments: round(outflows.reduce((s, x) => s + x.amount, 0)),
+      },
+      warnings: [
+        ...(cash ? [] : ['No hay caja registrada: la proyección parte desde $0. Regístrala en Aportes.']),
+        ...(ordersWithoutPlan ? [`${ordersWithoutPlan} pedido(s) en curso sin cuotas generadas`] : []),
+      ],
+      notes: [
+        'Montos sin IVA. Ventas y gastos del giro son supuestos mensuales; el primer mes se prorratea desde la fecha de la caja.',
+        'Lo vencido y no marcado como pagado/cobrado se cuenta en el primer mes.',
+        'El costo de la mercadería ya pagada no es salida de caja: solo cuentan las cuotas pendientes.',
+      ],
+    };
   }
 
   // ============================================================

@@ -265,8 +265,9 @@ model ImportOrder {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  costs ImportOrderCost[]
-  items ImportOrderItem[]
+  costs    ImportOrderCost[]
+  items    ImportOrderItem[]
+  payments ImportPayment[]
 }
 
 model ImportOrderCost {
@@ -387,6 +388,8 @@ model WholesaleSale {
   vatAmount     Float               @default(0)
   documentUrl   String?
   notes         String?
+  dueDate       DateTime? // Vencimiento del cobro; si falta se asume fecha + 30 días
+  paidAt        DateTime? // Fecha en que el mayorista pagó
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   lines         WholesaleSaleLine[]
@@ -407,4 +410,25 @@ model WholesaleSaleLine {
   updatedAt    DateTime      @updatedAt
 
   @@index([saleId])
+}
+
+// Cuota de pago de la factura de fábrica de un pedido (por defecto 40% al salir de España,
+// 30% a 30 días y 30% a 60 días). Solo afecta el flujo de caja, no el resultado.
+model ImportPayment {
+  id            String      @id @default(uuid())
+  orderId       String
+  order         ImportOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  installment   Int // 1, 2, 3…
+  percent       Float // 0.4 = 40%
+  dueDate       DateTime
+  amountEur     Float?
+  amountClp     Float // Monto estimado en CLP (editable: el tipo de cambio real puede variar)
+  paidAt        DateTime?
+  paidAmountClp Float?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([orderId, installment])
+  @@index([dueDate])
 }

@@ -7,9 +7,11 @@ import ContributionsScreen from "./ContributionsScreen";
 import ResultScreen from "./ResultScreen";
 import ProductCostsScreen from "./ProductCostsScreen";
 import WholesaleScreen from "./WholesaleScreen";
+import CashFlowScreen from "./CashFlowScreen";
 
 const SCREENS = [
   { key: "result", label: "📈 Resultado" },
+  { key: "cashflow", label: "💵 Flujo de caja" },
   { key: "orders", label: "📦 Pedidos" },
   { key: "wholesale", label: "🏬 Ventas mayoristas" },
   { key: "expenses", label: "🧾 Gastos" },
@@ -49,6 +51,7 @@ export default function FinanceSection({ userId }: { userId: string }) {
           ))}
         </div>
         {screen === "result" && <ResultScreen api={api} />}
+        {screen === "cashflow" && <CashFlowScreen api={api} />}
         {screen === "orders" && <OrdersScreen api={api} />}
         {screen === "wholesale" && <WholesaleScreen api={api} />}
         {screen === "expenses" && <ExpensesScreen api={api} />}

@@ -105,7 +105,7 @@ La API valida el rol en cada ruta con el header `x-user-id` (mismo mecanismo que
 - **Amortización:** cualquier gasto con `amortizeMonths` se reparte en partes iguales desde su período.
 
 ### Endpoints (`/finance`, todos solo Administrador)
-`GET/POST /orders`, `GET/PATCH/DELETE /orders/:id`, `POST /orders/:id/costs`, `PATCH/DELETE /costs/:id`, `POST|GET /costs/:id/document`, `POST /orders/:id/items`, `PATCH/DELETE /items/:id`, `GET /product-costs`, `POST /product-costs/assign|unassign|recompute`, `GET/POST /expenses` (`?from=&to=&category=`), `POST /expenses/duplicate-fixed`, `PATCH/DELETE /expenses/:id`, `POST|GET /expenses/:id/document`, `GET/POST /contributions`, `PATCH/DELETE /contributions/:id`, `GET/POST /cash`, `DELETE /cash/:id`, `GET/POST /wholesale`, `PATCH/DELETE /wholesale/:id`, `POST|GET /wholesale/:id/document`, `GET /monthly?from=YYYY-MM&to=YYYY-MM`, `GET /summary`.
+`GET/POST /orders`, `GET/PATCH/DELETE /orders/:id`, `POST /orders/:id/costs`, `PATCH/DELETE /costs/:id`, `POST|GET /costs/:id/document`, `POST /orders/:id/items`, `PATCH/DELETE /items/:id`, `GET /product-costs`, `POST /product-costs/assign|unassign|recompute`, `GET/POST /expenses` (`?from=&to=&category=`), `POST /expenses/duplicate-fixed`, `PATCH/DELETE /expenses/:id`, `POST|GET /expenses/:id/document`, `GET/POST /contributions`, `PATCH/DELETE /contributions/:id`, `GET/POST /cash`, `DELETE /cash/:id`, `GET /payments`, `POST|DELETE /orders/:id/payments`, `PATCH /payments/:id`, `GET /cashflow?months=&monthlySales=&monthlyExpenses=`, `GET/POST /wholesale`, `PATCH/DELETE /wholesale/:id`, `POST|GET /wholesale/:id/document`, `GET /monthly?from=YYYY-MM&to=YYYY-MM`, `GET /summary`.
 
 ### Documentos
 Bucket privado `finanzas-documentos` (proyecto Supabase `ardbkecvixlqufswdcoa`). Se guarda la ruta interna y se abren con un link firmado de 10 minutos. Variables de la API: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (solo servidor). PDF, imagen o Excel, hasta 15 MB.
@@ -126,4 +126,11 @@ Es idempotente: actualiza las filas `csv:*`, borra las que ya no están en el CS
 - En el Resultado aparecen como líneas aparte (Tiendas / Mayoristas). Los **pares de equilibrio y el margen por par usan solo tiendas**, porque las compras mayoristas son esporádicas y con otro margen.
 - No se registran como ventas `RETAIL` en el POS para no tocar ventas ni stock del POS. Las ventas `RETAIL` del POS siguen excluidas (hoy no hay ninguna).
 - Paris: facturas N°38 (FW26, 21-05-2026) y N°43 y N°44 (SS26, 07-10-2026). En la N°44, "Lirio Pink" = Lirio Topos.
+
+### Flujo de caja (2026-11-15)
+- Es una proyección de **caja**, separada del resultado: los plazos de pago no cambian la utilidad de un mes, solo cuándo se mueve la plata.
+- `ImportPayment`: cuotas de la factura de fábrica. Por defecto 40% al salir de España (= fecha de la factura de España), 30% a 30 días y 30% a 60 días. El CLP es estimado y editable, porque el tipo de cambio real se conoce al pagar. Al generar las cuotas, la fecha queda guardada en el costo FACTORY_INVOICE si no tenía.
+- `WholesaleSale.dueDate` (si falta, fecha + 30 días) y `paidAt`: cobros a mayoristas.
+- Proyección: parte del último `CashBalance`. Suma ventas de tiendas y resta gastos con supuestos mensuales (por defecto, promedio de los 3 últimos meses cerrados; se pueden cambiar en pantalla). Ubica los cobros y las cuotas pendientes en el mes de su vencimiento, y lo vencido no marcado en el primer mes. Lo pagado después de la fecha de la caja se sigue contando. Montos sin IVA; el primer mes se prorratea.
+- SQL: `apps/api/prisma/sql/20261115_flujo_de_caja.sql` (1 tabla nueva y 2 columnas opcionales en `WholesaleSale`, con RLS).
 

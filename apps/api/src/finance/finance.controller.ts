@@ -184,6 +184,33 @@ export class FinanceController {
     return this.finance.documentLink('wholesale', id);
   }
 
+  // ---------------- Flujo de caja ----------------
+  @Get('payments')
+  listPayments() {
+    return this.finance.listPayments();
+  }
+
+  @Post('orders/:id/payments')
+  generatePayments(@Param('id') id: string, @Body() body: Body) {
+    return this.finance.generatePayments(id, body);
+  }
+
+  @Delete('orders/:id/payments')
+  deletePayments(@Param('id') id: string) {
+    return this.finance.deletePayments(id);
+  }
+
+  @Patch('payments/:id')
+  updatePayment(@Param('id') id: string, @Body() body: Body) {
+    return this.finance.updatePayment(id, body);
+  }
+
+  /** GET /finance/cashflow?months=6&monthlySales=&monthlyExpenses= */
+  @Get('cashflow')
+  cashflow(@Query() query: { months?: string; monthlySales?: string; monthlyExpenses?: string }) {
+    return this.finance.cashflow(query);
+  }
+
   // ---------------- Aportes y caja ----------------
   @Get('contributions')
   listContributions() {

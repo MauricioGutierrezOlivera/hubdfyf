@@ -224,3 +224,121 @@ export function monthsToRecover(hole: number, monthlyResult: number | null): num
   if (!monthlyResult || monthlyResult <= 0) return null;
   return hole / monthlyResult;
 }
+
+// ------------------------------------------------------------
+// Flujo de caja
+// ------------------------------------------------------------
+
+/** Condiciones de pago de la fábrica: días desde la factura de España (salida de la mercadería). */
+export const DEFAULT_PAYMENT_TERMS = [
+  { percent: 0.4, days: 0 },
+  { percent: 0.3, days: 30 },
+  { percent: 0.3, days: 60 },
+];
+
+export interface InstallmentPlan {
+  installment: number;
+  percent: number;
+  dueDate: Date;
+  amountEur: number | null;
+  amountClp: number;
+}
+
+/** Divide la factura de fábrica en cuotas; la última absorbe el redondeo para que sumen exacto. */
+export function buildInstallments(
+  invoiceDate: Date,
+  amountEur: number | null,
+  amountClp: number,
+  terms = DEFAULT_PAYMENT_TERMS,
+): InstallmentPlan[] {
+  let eurLeft = amountEur;
+  let clpLeft = amountClp;
+  return terms.map((t, i) => {
+    const last = i === terms.length - 1;
+    const eur = amountEur === null ? null : last ? eurLeft! : Math.round(amountEur * t.percent * 100) / 100;
+    const clp = last ? clpLeft : Math.round(amountClp * t.percent);
+    if (eurLeft !== null && eur !== null) eurLeft = Math.round((eurLeft - eur) * 100) / 100;
+    clpLeft -= clp;
+    const dueDate = new Date(invoiceDate.getTime() + t.days * 86_400_000);
+    return { installment: i + 1, percent: t.percent, dueDate, amountEur: eur, amountClp: clp };
+  });
+}
+
+export interface CashItem {
+  date: Date;
+  amount: number;
+  label: string;
+}
+
+export interface CashFlowMonth {
+  period: string;
+  opening: number;
+  /** Fracción del mes proyectada (el primer mes parte en la fecha de la caja) */
+  fraction: number;
+  sales: number;
+  expenses: number;
+  inflows: (CashItem & { overdue: boolean })[];
+  outflows: (CashItem & { overdue: boolean })[];
+  closing: number;
+}
+
+function daysInPeriod(period: string) {
+  const [y, m] = period.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+function dayOfMonth(date: Date) {
+  return Number(new Intl.DateTimeFormat('en-CA', { timeZone: CHILE_TZ, day: 'numeric' }).format(date));
+}
+
+/**
+ * Proyecta la caja mes a mes desde un saldo conocido. Ventas y gastos del giro son montos mensuales
+ * supuestos (el primer mes se prorratea por los días que quedan); cobros y pagos se ubican en el mes
+ * de su vencimiento. Lo vencido y no pagado se ubica en el primer mes.
+ */
+export function projectCashFlow(input: {
+  startDate: Date;
+  startCash: number;
+  months: number;
+  monthlySales: number;
+  monthlyExpenses: number;
+  inflows: CashItem[];
+  outflows: CashItem[];
+}): { months: CashFlowMonth[]; beyond: { inflows: number; outflows: number } } {
+  const first = periodOf(input.startDate);
+  const last = addMonths(first, input.months - 1);
+  const rows: CashFlowMonth[] = periodRange(first, last).map((period, i) => {
+    const fraction =
+      i === 0 ? (daysInPeriod(period) - dayOfMonth(input.startDate) + 1) / daysInPeriod(period) : 1;
+    return {
+      period,
+      opening: 0,
+      fraction,
+      sales: input.monthlySales * fraction,
+      expenses: input.monthlyExpenses * fraction,
+      inflows: [],
+      outflows: [],
+      closing: 0,
+    };
+  });
+  const beyond = { inflows: 0, outflows: 0 };
+  const place = (item: CashItem, key: 'inflows' | 'outflows') => {
+    const overdue = item.date < input.startDate;
+    const period = overdue ? first : periodOf(item.date);
+    const row = rows.find((r) => r.period === period);
+    if (row) row[key].push({ ...item, overdue });
+    else beyond[key] += item.amount;
+  };
+  input.inflows.forEach((x) => place(x, 'inflows'));
+  input.outflows.forEach((x) => place(x, 'outflows'));
+
+  let cash = input.startCash;
+  for (const r of rows) {
+    r.opening = cash;
+    const ins = r.inflows.reduce((s, x) => s + x.amount, 0);
+    const outs = r.outflows.reduce((s, x) => s + x.amount, 0);
+    cash = cash + r.sales - r.expenses + ins - outs;
+    r.closing = cash;
+  }
+  return { months: rows, beyond };
+}
