@@ -386,7 +386,17 @@ export class FinanceService {
       this.prisma.productCostLink.findMany(),
     ]);
     const linkByProduct = new Map(links.map((l) => [l.productId, l]));
-    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    // Se agrupan los cambios para escribir en pocas consultas: contra la base remota cada consulta
+    // tarda ~100 ms, y miles de escrituras individuales superan el límite de la transacción.
+    const creates: Prisma.ProductCostLinkCreateManyInput[] = [];
+    const deleteIds: string[] = [];
+    const updates = new Map<string, { data: { modelKey?: string; unitCost: number }; ids: string[] }>();
+    const queueUpdate = (id: string, data: { modelKey?: string; unitCost: number }) => {
+      const group = `${data.modelKey ?? ''}|${data.unitCost}`;
+      const entry = updates.get(group) ?? { data, ids: [] };
+      entry.ids.push(id);
+      updates.set(group, entry);
+    };
 
     for (const p of products) {
       const link = linkByProduct.get(p.id);
@@ -396,33 +406,31 @@ export class FinanceService {
           // El modelo ya no tiene pedidos recibidos: se mantiene la asignación con el último costo
           continue;
         }
-        if (Math.abs(cost - link.unitCost) > 0.01) {
-          ops.push(this.prisma.productCostLink.update({ where: { id: link.id }, data: { unitCost: cost } }));
-        }
+        if (Math.abs(cost - link.unitCost) > 0.01) queueUpdate(link.id, { unitCost: cost });
         continue;
       }
       const key = matchModelKey(p.name, keys);
       if (!key) {
-        if (link) ops.push(this.prisma.productCostLink.delete({ where: { id: link.id } }));
+        if (link) deleteIds.push(link.id);
         continue;
       }
       const cost = averages.get(key)!;
       if (!link) {
-        ops.push(
-          this.prisma.productCostLink.create({
-            data: { productId: p.id, modelKey: key, unitCost: cost, matchSource: 'AUTO' },
-          }),
-        );
+        creates.push({ productId: p.id, modelKey: key, unitCost: cost, matchSource: 'AUTO' });
       } else if (link.modelKey !== key || Math.abs(link.unitCost - cost) > 0.01) {
-        ops.push(
-          this.prisma.productCostLink.update({ where: { id: link.id }, data: { modelKey: key, unitCost: cost } }),
-        );
+        queueUpdate(link.id, { modelKey: key, unitCost: cost });
       }
     }
-    for (let i = 0; i < ops.length; i += 500) {
-      await this.prisma.$transaction(ops.slice(i, i + 500));
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    if (deleteIds.length) ops.push(this.prisma.productCostLink.deleteMany({ where: { id: { in: deleteIds } } }));
+    if (creates.length) ops.push(this.prisma.productCostLink.createMany({ data: creates }));
+    for (const { data, ids } of updates.values()) {
+      ops.push(this.prisma.productCostLink.updateMany({ where: { id: { in: ids } }, data }));
     }
-    return { changed: ops.length };
+    if (ops.length) await this.prisma.$transaction(ops);
+    let changed = creates.length + deleteIds.length;
+    for (const { ids } of updates.values()) changed += ids.length;
+    return { changed };
   }
 
   /** Pantalla "Costos por producto": modelos con costo y productos agrupados por nombre. */

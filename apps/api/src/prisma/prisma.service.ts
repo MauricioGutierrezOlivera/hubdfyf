@@ -38,7 +38,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     });
 
     const adapter = new PrismaPg(pool);
-    super({ adapter });
+    // Las transacciones con cientos de filas superan el límite por defecto de 5 s contra la base remota.
+    super({ adapter, transactionOptions: { maxWait: 10000, timeout: 60000 } });
     this.pool = pool;
   }
 
