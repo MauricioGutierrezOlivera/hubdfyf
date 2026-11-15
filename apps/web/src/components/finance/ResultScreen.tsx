@@ -45,6 +45,8 @@ interface Summary {
   accumulatedFrom: string | null;
   cash: { amount: number; date: string } | null;
   netHole: number;
+  payablesPending: number;
+  receivablesPending: number;
   operatingResultMA3: number | null;
   monthsToRecover: number | null;
   recoverMessage: string | null;
@@ -160,7 +162,9 @@ export default function ResultScreen({ api }: { api: FinanceApi }) {
           <Stat
             label="Hoyo neto"
             value={clp(summary.netHole)}
-            hint={`Aportes ${clp(summary.contributionsTotal)} − caja ${clp(summary.cash?.amount ?? 0)} − stock ${clp(summary.stockValue)}`}
+            hint={`Aportes ${clp(summary.contributionsTotal)} − caja ${clp(summary.cash?.amount ?? 0)} − stock ${clp(summary.stockValue)}${
+              summary.payablesPending ? ` + cuotas por pagar ${clp(summary.payablesPending)}` : ""
+            }${summary.receivablesPending ? ` − por cobrar ${clp(summary.receivablesPending)}` : ""}`}
             tone={summary.netHole > 0 ? "bad" : "good"}
           />
           <Stat

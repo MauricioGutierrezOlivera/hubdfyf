@@ -1150,6 +1150,19 @@ export class FinanceService {
       .slice(2);
   }
 
+  /** Cuotas de importación por pagar y facturas mayoristas por cobrar, a una fecha de caja. */
+  private async pendingBalances(cashDate: Date) {
+    const pending = { OR: [{ paidAt: null }, { paidAt: { gt: cashDate } }] };
+    const [payments, sales] = await Promise.all([
+      this.prisma.importPayment.findMany({ where: pending, select: { amountClp: true, paidAmountClp: true } }),
+      this.prisma.wholesaleSale.findMany({ where: pending, select: { lines: { select: { quantity: true, unitPriceNet: true } } } }),
+    ]);
+    return {
+      payables: payments.reduce((sum, p) => sum + (p.paidAmountClp ?? p.amountClp), 0),
+      receivables: sales.reduce((sum, w) => sum + w.lines.reduce((x, l) => x + l.quantity * l.unitPriceNet, 0), 0),
+    };
+  }
+
   async summary() {
     // El mes en curso está incompleto: los indicadores se calculan al último mes cerrado
     const lastClosed = addMonths(periodOf(new Date()), -1);
@@ -1192,7 +1205,10 @@ export class FinanceService {
 
     const contributions = contrib._sum.amount || 0;
     const cashAmount = cash?.amount ?? null;
-    const hole = contributions - (cashAmount ?? 0) - stockValue;
+    // Lo que se debe a la fábrica aumenta el hoyo; lo que deben los mayoristas lo reduce.
+    // Igual que en el flujo de caja: cuenta lo pendiente a la fecha de la caja registrada.
+    const { payables, receivables } = await this.pendingBalances(cash?.date ?? new Date());
+    const hole = contributions - (cashAmount ?? 0) - stockValue + payables - receivables;
     const months = monthsToRecover(hole, ma3);
 
     return {
@@ -1205,6 +1221,8 @@ export class FinanceService {
       operatingResultAccumulated: round(rows.reduce((s, r) => s + r.operatingResult, 0)),
       accumulatedFrom: from ?? null,
       cash: cash ? { amount: round(cash.amount), date: cash.date } : null,
+      payablesPending: round(payables),
+      receivablesPending: round(receivables),
       netHole: round(hole),
       operatingResultMA3: ma3,
       monthsToRecover: months === null ? null : Math.round(months * 10) / 10,

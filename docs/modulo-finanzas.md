@@ -58,7 +58,7 @@ Por mes (period):
 
 Indicadores acumulados (`GET /finance/summary`):
 - Aportes acumulados, CAPEX acumulado, stock valorizado actual (Σ Inventory.quantity × unitCost), resultado operacional acumulado.
-- **Hoyo neto** = aportes acumulados − caja actual (input manual) − stock valorizado.
+- **Hoyo neto** = aportes acumulados − caja actual (input manual) − stock valorizado + cuotas de importación por pagar − facturas mayoristas por cobrar (pendientes a la fecha de la caja).
 - **Meses para recuperar** = hoyo neto / promedio móvil 3m (si positivo; si es negativo mostrar "no se recupera al ritmo actual").
 
 ## Pantallas (nueva sección "Finanzas" en el menú, solo admin)
