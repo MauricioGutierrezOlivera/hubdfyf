@@ -2,6 +2,8 @@
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+export type DocKind = "costs" | "expenses" | "wholesale";
+
 export class FinanceApi {
   constructor(private userId: string) {}
 
@@ -39,13 +41,13 @@ export class FinanceApi {
     return this.request<T>("DELETE", path);
   }
 
-  upload(kind: "costs" | "expenses", id: string, file: File) {
+  upload(kind: DocKind, id: string, file: File) {
     const form = new FormData();
     form.append("file", file);
     return this.request<{ documentUrl: string }>("POST", `/${kind}/${id}/document`, form);
   }
 
-  async openDocument(kind: "costs" | "expenses", id: string) {
+  async openDocument(kind: DocKind, id: string) {
     const { url } = await this.get<{ url: string }>(`/${kind}/${id}/document`);
     window.open(url, "_blank", "noopener");
   }

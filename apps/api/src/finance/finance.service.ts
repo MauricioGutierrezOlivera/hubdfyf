@@ -44,12 +44,21 @@ const EXPENSE_KINDS = Object.values(ExpenseKind);
 
 const round = (n: number) => Math.round(n);
 
+type DocumentKind = 'cost' | 'expense' | 'wholesale';
+
 export interface MonthlyRow {
   period: string;
+  /** Ventas netas totales = tiendas + mayoristas */
   netSales: number;
+  retailSales: number;
+  wholesaleSales: number;
+  /** Pares vendidos en tiendas (base del punto de equilibrio) */
   pairsSold: number;
+  wholesalePairs: number;
   unitsWithoutCost: number;
+  /** Costo de ventas total (tiendas + mayoristas) */
   costOfSales: number;
+  wholesaleCost: number;
   grossMargin: number;
   grossMarginPct: number | null;
   operatingExpenses: number;
@@ -686,27 +695,151 @@ export class FinanceService {
   }
 
   // ============================================================
+  // Ventas mayoristas (Paris, Falabella)
+  // ============================================================
+
+  async listWholesale() {
+    const [sales, averages] = await Promise.all([
+      this.prisma.wholesaleSale.findMany({
+        include: { lines: { orderBy: { createdAt: 'asc' } } },
+        orderBy: [{ date: 'desc' }, { invoiceNumber: 'desc' }],
+      }),
+      this.modelAverages(),
+    ]);
+    return sales.map((s) => {
+      const netAmount = s.lines.reduce((sum, l) => sum + l.quantity * l.unitPriceNet, 0);
+      // Sin redondear por línea para que cuadre con el costo de ventas del Resultado
+      const cost = s.lines.reduce((sum, l) => sum + l.quantity * (averages.get(l.modelKey) ?? 0), 0);
+      const lines = s.lines.map((l) => {
+        const unitCost = averages.get(l.modelKey) ?? null;
+        return { ...l, unitCost: unitCost === null ? null : round(unitCost) };
+      });
+      const withoutCost = lines.filter((l) => l.unitCost === null);
+      return {
+        ...s,
+        lines,
+        totals: {
+          pairs: lines.reduce((sum, l) => sum + l.quantity, 0),
+          netAmount: round(netAmount),
+          cost: round(cost),
+          margin: round(netAmount - cost),
+          marginPct: netAmount ? (netAmount - cost) / netAmount : null,
+        },
+        warnings: withoutCost.map(
+          (l) => `"${l.description}": el modelo "${l.modelKey}" no está en pedidos recibidos (queda sin costo)`,
+        ),
+      };
+    });
+  }
+
+  private wholesaleData(body: Body, creating: boolean) {
+    const docDate = date(body, 'date', { required: creating });
+    let period = str(body, 'period');
+    if (period && !isValidPeriod(period)) throw new BadRequestException('period debe tener formato YYYY-MM');
+    if (!period && docDate) period = periodOf(docDate);
+    return compact({
+      customer: str(body, 'customer', { required: creating }) ?? undefined,
+      invoiceNumber: str(body, 'invoiceNumber', { required: creating }) ?? undefined,
+      date: docDate ?? undefined,
+      period: period ?? undefined,
+      vatAmount: num(body, 'vatAmount', { min: 0 }),
+      notes: str(body, 'notes'),
+    });
+  }
+
+  private wholesaleLines(body: Body) {
+    if (body.lines === undefined) return undefined;
+    if (!Array.isArray(body.lines) || !body.lines.length) {
+      throw new BadRequestException('La factura debe tener al menos un modelo');
+    }
+    return (body.lines as Body[]).map((l) => {
+      const modelKey = normalizeKey(str(l, 'modelKey', { required: true })!);
+      return {
+        description: str(l, 'description') || modelKey,
+        modelKey,
+        quantity: int(l, 'quantity', { required: true, min: 1 })!,
+        unitPriceNet: num(l, 'unitPriceNet', { required: true, min: 0 })!,
+      };
+    });
+  }
+
+  async createWholesale(body: Body) {
+    const data = this.wholesaleData(body, true);
+    const lines = this.wholesaleLines(body);
+    if (!lines) throw new BadRequestException('La factura debe tener al menos un modelo');
+    await this.ensureInvoiceFree(data.customer!, data.invoiceNumber!);
+    return this.prisma.wholesaleSale.create({
+      data: { ...(data as Omit<Prisma.WholesaleSaleCreateInput, 'lines'>), lines: { create: lines } },
+      include: { lines: true },
+    });
+  }
+
+  async updateWholesale(id: string, body: Body) {
+    const current = await this.ensureWholesale(id);
+    const data = this.wholesaleData(body, false);
+    const lines = this.wholesaleLines(body);
+    const customer = data.customer ?? current.customer;
+    const invoiceNumber = data.invoiceNumber ?? current.invoiceNumber;
+    if (customer !== current.customer || invoiceNumber !== current.invoiceNumber) {
+      await this.ensureInvoiceFree(customer, invoiceNumber);
+    }
+    return this.prisma.wholesaleSale.update({
+      where: { id },
+      data: { ...data, ...(lines ? { lines: { deleteMany: {}, create: lines } } : {}) },
+      include: { lines: true },
+    });
+  }
+
+  async deleteWholesale(id: string) {
+    const current = await this.ensureWholesale(id);
+    await this.prisma.wholesaleSale.delete({ where: { id } });
+    if (current.documentUrl) await this.storage.remove(current.documentUrl);
+    return { ok: true };
+  }
+
+  private async ensureWholesale(id: string) {
+    const s = await this.prisma.wholesaleSale.findUnique({ where: { id } });
+    if (!s) throw new NotFoundException('Venta mayorista no encontrada');
+    return s;
+  }
+
+  private async ensureInvoiceFree(customer: string, invoiceNumber: string) {
+    const dup = await this.prisma.wholesaleSale.findUnique({
+      where: { customer_invoiceNumber: { customer, invoiceNumber } },
+      select: { id: true },
+    });
+    if (dup) throw new BadRequestException(`La factura ${invoiceNumber} de ${customer} ya está registrada`);
+  }
+
+  // ============================================================
   // Documentos
   // ============================================================
 
-  async attachDocument(kind: 'cost' | 'expense', id: string, file: UploadedDocument) {
-    const current =
-      kind === 'cost'
-        ? await this.prisma.importOrderCost.findUnique({ where: { id }, select: { documentUrl: true } })
-        : await this.prisma.expense.findUnique({ where: { id }, select: { documentUrl: true } });
-    if (!current) throw new NotFoundException(kind === 'cost' ? 'Costo no encontrado' : 'Gasto no encontrado');
-    const path = await this.storage.upload(kind === 'cost' ? 'costos' : 'gastos', file);
-    if (kind === 'cost') await this.prisma.importOrderCost.update({ where: { id }, data: { documentUrl: path } });
-    else await this.prisma.expense.update({ where: { id }, data: { documentUrl: path } });
+  private findDocument(kind: DocumentKind, id: string) {
+    const select = { documentUrl: true };
+    if (kind === 'cost') return this.prisma.importOrderCost.findUnique({ where: { id }, select });
+    if (kind === 'expense') return this.prisma.expense.findUnique({ where: { id }, select });
+    return this.prisma.wholesaleSale.findUnique({ where: { id }, select });
+  }
+
+  async attachDocument(kind: DocumentKind, id: string, file: UploadedDocument) {
+    const current = await this.findDocument(kind, id);
+    if (!current) {
+      const label = { cost: 'Costo', expense: 'Gasto', wholesale: 'Venta mayorista' }[kind];
+      throw new NotFoundException(`${label} no encontrado`);
+    }
+    const folder = ({ cost: 'costos', expense: 'gastos', wholesale: 'mayoristas' } as const)[kind];
+    const path = await this.storage.upload(folder, file);
+    const data = { documentUrl: path };
+    if (kind === 'cost') await this.prisma.importOrderCost.update({ where: { id }, data });
+    else if (kind === 'expense') await this.prisma.expense.update({ where: { id }, data });
+    else await this.prisma.wholesaleSale.update({ where: { id }, data });
     if (current.documentUrl) await this.storage.remove(current.documentUrl);
     return { documentUrl: path };
   }
 
-  async documentLink(kind: 'cost' | 'expense', id: string) {
-    const current =
-      kind === 'cost'
-        ? await this.prisma.importOrderCost.findUnique({ where: { id }, select: { documentUrl: true } })
-        : await this.prisma.expense.findUnique({ where: { id }, select: { documentUrl: true } });
+  async documentLink(kind: DocumentKind, id: string) {
+    const current = await this.findDocument(kind, id);
     if (!current?.documentUrl) throw new NotFoundException('Sin documento adjunto');
     return { url: await this.storage.signedUrl(current.documentUrl) };
   }
@@ -751,6 +884,30 @@ export class FinanceService {
     return out;
   }
 
+  /** Ventas mayoristas por período; el costo es el promedio ponderado vigente del modelo. */
+  private async wholesaleByPeriod(from: string, to: string) {
+    const [sales, averages] = await Promise.all([
+      this.prisma.wholesaleSale.findMany({
+        where: { period: { gte: from, lte: to } },
+        select: { period: true, lines: { select: { modelKey: true, quantity: true, unitPriceNet: true } } },
+      }),
+      this.modelAverages(),
+    ]);
+    const out = new Map<string, { netSales: number; pairs: number; cogs: number; noCost: number }>();
+    for (const s of sales) {
+      const row = out.get(s.period) || { netSales: 0, pairs: 0, cogs: 0, noCost: 0 };
+      for (const l of s.lines) {
+        row.netSales += l.quantity * l.unitPriceNet;
+        row.pairs += l.quantity;
+        const cost = averages.get(l.modelKey);
+        if (cost === undefined) row.noCost += l.quantity;
+        else row.cogs += l.quantity * cost;
+      }
+      out.set(s.period, row);
+    }
+    return out;
+  }
+
   async monthly(fromQ?: string, toQ?: string) {
     const current = periodOf(new Date());
     const to = toQ || current;
@@ -772,7 +929,8 @@ export class FinanceService {
         })(),
       },
       notes: [
-        'Ventas netas = total / 1,19. Excluye ventas RETAIL (mayoristas).',
+        'Ventas netas = tiendas (total / 1,19) + mayoristas (facturas registradas en Ventas mayoristas).',
+        'El punto de equilibrio usa solo pares y margen de tiendas.',
         'Costo de ventas usa el costo vigente (promedio ponderado) de cada producto.',
       ],
     };
@@ -782,8 +940,9 @@ export class FinanceService {
   private async computeMonthly(from: string, to: string): Promise<MonthlyRow[]> {
     const calcFrom = addMonths(from, -2);
     const periods = periodRange(calcFrom, to);
-    const [sales, expenses] = await Promise.all([
+    const [sales, wholesale, expenses] = await Promise.all([
       this.salesByPeriod(calcFrom, to),
+      this.wholesaleByPeriod(calcFrom, to),
       this.prisma.expense.findMany({
         // Un gasto amortizado puede venir de hasta varios años antes
         where: { period: { lte: to } },
@@ -792,26 +951,34 @@ export class FinanceService {
     ]);
     const exp = expensesByPeriod(expenses);
 
-    const salesOf = (p: string) => sales.get(p) || { netSales: 0, pairs: 0, cogs: 0, noCost: 0 };
+    const empty = { netSales: 0, pairs: 0, cogs: 0, noCost: 0 };
+    const salesOf = (p: string) => sales.get(p) || empty;
     const base = periods.map((period, idx) => {
       const s = salesOf(period);
+      const w = wholesale.get(period) || empty;
       const e = exp.get(period) || { operating: 0, fixed: 0, capex: 0, financial: 0, byCategory: {} };
-      const grossMargin = s.netSales - s.cogs;
+      const netSales = s.netSales + w.netSales;
+      const grossMargin = netSales - s.cogs - w.cogs;
       const operatingResult = grossMargin - e.operating;
-      // Margen bruto unitario PROMEDIO de los últimos 3 meses (incluye el actual):
-      // un solo mes con pocas ventas o devoluciones da valores sin sentido.
+      // Margen bruto unitario PROMEDIO de los últimos 3 meses (incluye el actual), solo tiendas:
+      // un solo mes con pocas ventas o devoluciones da valores sin sentido, y las compras
+      // mayoristas son esporádicas y con otro margen.
       const window = periods.slice(Math.max(0, idx - 2), idx + 1).map(salesOf);
-      const wPairs = window.reduce((sum, w) => sum + w.pairs, 0);
-      const wMargin = window.reduce((sum, w) => sum + w.netSales - w.cogs, 0);
+      const wPairs = window.reduce((sum, x) => sum + x.pairs, 0);
+      const wMargin = window.reduce((sum, x) => sum + x.netSales - x.cogs, 0);
       const unitGrossMargin = wPairs > 0 ? wMargin / wPairs : null;
       return {
         period,
-        netSales: round(s.netSales),
+        netSales: round(netSales),
+        retailSales: round(s.netSales),
+        wholesaleSales: round(w.netSales),
         pairsSold: s.pairs,
-        unitsWithoutCost: s.noCost,
-        costOfSales: round(s.cogs),
+        wholesalePairs: w.pairs,
+        unitsWithoutCost: s.noCost + w.noCost,
+        costOfSales: round(s.cogs + w.cogs),
+        wholesaleCost: round(w.cogs),
         grossMargin: round(grossMargin),
-        grossMarginPct: s.netSales ? grossMargin / s.netSales : null,
+        grossMarginPct: netSales ? grossMargin / netSales : null,
         operatingExpenses: round(e.operating),
         fixedExpenses: round(e.fixed),
         expensesByCategory: Object.fromEntries(Object.entries(e.byCategory).map(([k, v]) => [k, round(v)])),

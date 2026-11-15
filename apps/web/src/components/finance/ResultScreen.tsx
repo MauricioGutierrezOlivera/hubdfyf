@@ -6,9 +6,13 @@ import { Card, ErrorBox, Stat, Warning, btnSecondary, tdCls, thCls, trCls } from
 interface MonthlyRow {
   period: string;
   netSales: number;
+  retailSales: number;
+  wholesaleSales: number;
   pairsSold: number;
+  wholesalePairs: number;
   unitsWithoutCost: number;
   costOfSales: number;
+  wholesaleCost: number;
   grossMargin: number;
   grossMarginPct: number | null;
   operatingExpenses: number;
@@ -91,8 +95,16 @@ export default function ResultScreen({ api }: { api: FinanceApi }) {
 
   const lines: Line[] = [
     { label: "Ventas netas (sin IVA)", get: (r) => clp(r.netSales), strong: true },
-    { label: "Pares vendidos", get: (r) => numFmt(r.pairsSold) },
+    { label: "Tiendas", get: (r) => clp(r.retailSales), indent: true },
+    { label: "Mayoristas", get: (r) => (r.wholesaleSales ? clp(r.wholesaleSales) : "—"), indent: true },
+    { label: "Pares vendidos tiendas", get: (r) => numFmt(r.pairsSold) },
+    { label: "Pares mayoristas", get: (r) => (r.wholesalePairs ? numFmt(r.wholesalePairs) : "—") },
     { label: "Costo de ventas", get: (r) => clp(-r.costOfSales) },
+    {
+      label: "de mayoristas",
+      get: (r) => (r.wholesaleCost ? clp(-r.wholesaleCost) : "—"),
+      indent: true,
+    },
     { label: "Margen bruto", get: (r) => clp(r.grossMargin), strong: true },
     { label: "Margen bruto %", get: (r) => pct(r.grossMarginPct), indent: true },
     { label: "Gastos operacionales", get: (r) => clp(-r.operatingExpenses) },
@@ -245,8 +257,9 @@ export default function ResultScreen({ api }: { api: FinanceApi }) {
         </table>
       </Card>
       <p className="text-xs text-gray-500 font-semibold">
-        Ventas netas = total / 1,19 (sin ventas mayoristas RETAIL). Costo de ventas al costo vigente de cada producto (promedio
-        ponderado de pedidos recibidos). El mes en curso puede estar incompleto.
+        Ventas netas = tiendas (total / 1,19) + facturas de Ventas mayoristas. Costo de ventas al costo vigente de cada modelo
+        (promedio ponderado de pedidos recibidos). Los pares de equilibrio se calculan solo con tiendas. El mes en curso puede
+        estar incompleto.
       </p>
     </div>
   );

@@ -152,6 +152,38 @@ export class FinanceController {
     return this.finance.documentLink('expense', id);
   }
 
+  // ---------------- Ventas mayoristas ----------------
+  @Get('wholesale')
+  listWholesale() {
+    return this.finance.listWholesale();
+  }
+
+  @Post('wholesale')
+  createWholesale(@Body() body: Body) {
+    return this.finance.createWholesale(body);
+  }
+
+  @Patch('wholesale/:id')
+  updateWholesale(@Param('id') id: string, @Body() body: Body) {
+    return this.finance.updateWholesale(id, body);
+  }
+
+  @Delete('wholesale/:id')
+  deleteWholesale(@Param('id') id: string) {
+    return this.finance.deleteWholesale(id);
+  }
+
+  @Post('wholesale/:id/document')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES } }))
+  uploadWholesaleDocument(@Param('id') id: string, @UploadedFile() file: UploadedDocument) {
+    return this.finance.attachDocument('wholesale', id, file);
+  }
+
+  @Get('wholesale/:id/document')
+  wholesaleDocument(@Param('id') id: string) {
+    return this.finance.documentLink('wholesale', id);
+  }
+
   // ---------------- Aportes y caja ----------------
   @Get('contributions')
   listContributions() {

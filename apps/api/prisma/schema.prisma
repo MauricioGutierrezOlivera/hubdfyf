@@ -16,28 +16,28 @@ model Country {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stores    Store[]
-  users     User[]   // Admins of this country
+  stores Store[]
+  users  User[] // Admins of this country
 }
 
 model Store {
-  id          String   @id @default(uuid())
-  name        String
-  address     String?
-  countryId   String
-  country     Country  @relation(fields: [countryId], references: [id])
-  
+  id        String  @id @default(uuid())
+  name      String
+  address   String?
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id])
+
   // Shopify Connection details for this store (Client Credentials)
   shopifyUrl          String?
   shopifyClientId     String?
   shopifyClientSecret String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
-  users       UserStore[]
-  sales       Sale[]
-  inventory   Inventory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     UserStore[]
+  sales     Sale[]
+  inventory Inventory[]
 }
 
 enum Role {
@@ -48,80 +48,80 @@ enum Role {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      Role     @default(CLERK)
-  
+  id       String @id @default(uuid())
+  email    String @unique
+  password String
+  name     String
+  role     Role   @default(CLERK)
+
   // If COUNTRY_ADMIN, which country they manage
   countryId String?
   country   Country? @relation(fields: [countryId], references: [id])
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stores    UserStore[]
-  sales     Sale[]
-  goals     SalesGoal[]
+  stores UserStore[]
+  sales  Sale[]
+  goals  SalesGoal[]
 }
 
 // Join table for User-Store many-to-many relationship
 model UserStore {
   userId  String
   storeId String
-  user    User  @relation(fields: [userId], references: [id])
-  store   Store @relation(fields: [storeId], references: [id])
+  user    User   @relation(fields: [userId], references: [id])
+  store   Store  @relation(fields: [storeId], references: [id])
 
   @@id([userId, storeId])
 }
 
 model Customer {
-  id        String   @id @default(uuid())
-  rut       String?  @unique
-  name      String
-  email     String?
-  phone     String?
-  
+  id    String  @id @default(uuid())
+  rut   String? @unique
+  name  String
+  email String?
+  phone String?
+
   // Sincronización con Shopify
-  shopifyId String?  @unique
-  
+  shopifyId String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales     Sale[]
+  sales Sale[]
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  shopifyId   String   @unique
-  sku         String?
-  name        String
-  family      String?  // Botas, Balerinas, etc.
-  style       String?  // Bailarina, Blucher, Tacón, Botín, Sandalia, Yute, Running, etc.
-  color       String?
-  size        String
+  id             String  @id @default(uuid())
+  shopifyId      String  @unique
+  sku            String?
+  name           String
+  family         String? // Botas, Balerinas, etc.
+  style          String? // Bailarina, Blucher, Tacón, Botín, Sandalia, Yute, Running, etc.
+  color          String?
+  size           String
   price          Float
   compareAtPrice Float?
-  status         String   @default("active")
-  imageUrl    String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status         String  @default("active")
+  imageUrl       String?
 
-  inventory   Inventory[]
-  saleItems   SaleItem[]
-  costLink    ProductCostLink?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory Inventory[]
+  saleItems SaleItem[]
+  costLink  ProductCostLink?
 }
 
 model Inventory {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   storeId   String
   productId String
-  quantity  Int      @default(0)
+  quantity  Int    @default(0)
 
-  store     Store    @relation(fields: [storeId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
   @@unique([storeId, productId])
 }
@@ -133,50 +133,50 @@ enum SaleType {
 }
 
 model Sale {
-  id            String   @id @default(uuid())
-  storeId       String
-  userId        String?  // Puede ser nulo en caso de Retail (Vendedor: DFYF)
-  customerId    String?
-  type          SaleType @default(NORMAL)
-  total         Float    @default(0)
-  notes         String?  // Ej: Regalo para amiga, Boda
-  
+  id         String   @id @default(uuid())
+  storeId    String
+  userId     String? // Puede ser nulo en caso de Retail (Vendedor: DFYF)
+  customerId String?
+  type       SaleType @default(NORMAL)
+  total      Float    @default(0)
+  notes      String? // Ej: Regalo para amiga, Boda
+
   // Campos adicionales para reportes e ingesta histórica
   date          DateTime @default(now())
-  vendedor      String?  // Beatriz, Marite, Vicky, ONLINE, EVENTO, etc.
-  channel       String?  // ONLINE, OFFLINE, EVENTO
+  vendedor      String? // Beatriz, Marite, Vicky, ONLINE, EVENTO, etc.
+  channel       String? // ONLINE, OFFLINE, EVENTO
   paymentMethod String?
   paymentBank   String?
-  
-  store         Store    @relation(fields: [storeId], references: [id])
-  user          User?    @relation(fields: [userId], references: [id])
-  customer      Customer? @relation(fields: [customerId], references: [id])
-  items         SaleItem[]
 
-  createdAt     DateTime @default(now())
+  store    Store      @relation(fields: [storeId], references: [id])
+  user     User?      @relation(fields: [userId], references: [id])
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+
+  createdAt DateTime @default(now())
 }
 
 model SaleItem {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   saleId    String
   productId String
-  
-  quantity  Int      // Puede ser negativo en caso de Devolución/Cambio
-  price     Float
-  discount  Float    @default(0)
 
-  sale      Sale     @relation(fields: [saleId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  quantity Int // Puede ser negativo en caso de Devolución/Cambio
+  price    Float
+  discount Float @default(0)
+
+  sale    Sale    @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model SalesGoal {
-  id        String   @id @default(uuid())
-  userId    String
-  month     Int
-  year      Int
-  target    Float
-  
-  user      User     @relation(fields: [userId], references: [id])
+  id     String @id @default(uuid())
+  userId String
+  month  Int
+  year   Int
+  target Float
+
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, month, year])
 }
@@ -247,7 +247,7 @@ enum ExpenseKind {
 }
 
 enum CostMatchSource {
-  AUTO   // Asignado por coincidencia de nombre
+  AUTO // Asignado por coincidencia de nombre
   MANUAL // Asignado a mano en "Costos por producto"
 }
 
@@ -255,18 +255,18 @@ model ImportOrder {
   id          String            @id @default(uuid())
   code        String            @unique // "P1"
   name        String
-  season      String?           // "SS25"
+  season      String? // "SS25"
   transport   ImportTransport
   orderDate   DateTime?
   arrivalDate DateTime?
-  eurClpRate  Float             // Tipo de cambio de la factura de fábrica
+  eurClpRate  Float // Tipo de cambio de la factura de fábrica
   status      ImportOrderStatus @default(DRAFT)
   notes       String?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  costs       ImportOrderCost[]
-  items       ImportOrderItem[]
+  costs ImportOrderCost[]
+  items ImportOrderItem[]
 }
 
 model ImportOrderCost {
@@ -279,43 +279,43 @@ model ImportOrderCost {
   currency       FinanceCurrency @default(CLP)
   amount         Float
   fxRate         Float           @default(1)
-  amountClp      Float           // amount * fxRate
+  amountClp      Float // amount * fxRate
   vatAmount      Float           @default(0)
-  documentUrl    String?         // Ruta en el bucket privado "finanzas-documentos"
+  documentUrl    String? // Ruta en el bucket privado "finanzas-documentos"
   notes          String?
   importKey      String?         @unique // Para que la carga CSV sea idempotente
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  order          ImportOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order ImportOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
 
 model ImportOrderItem {
-  id                String             @id @default(uuid())
-  orderId           String
-  category          ImportItemCategory @default(FOOTWEAR)
-  style             String?            // Bailarina, Blucher...
-  model             String?            // "Amatista"
-  color             String?            // "black"
-  modelKey          String             // "amatista black" (minúsculas, sin tildes)
-  quantityInvoiced  Int
-  quantityReceived  Int
-  unitCostEur       Float              // Precio fábrica sin IVA
-  retailPrice       Float?             // PVP con IVA
-  sizeBreakdown     Json?              // {"36":1,"37":2}
+  id               String             @id @default(uuid())
+  orderId          String
+  category         ImportItemCategory @default(FOOTWEAR)
+  style            String? // Bailarina, Blucher...
+  model            String? // "Amatista"
+  color            String? // "black"
+  modelKey         String // "amatista black" (minúsculas, sin tildes)
+  quantityInvoiced Int
+  quantityReceived Int
+  unitCostEur      Float // Precio fábrica sin IVA
+  retailPrice      Float? // PVP con IVA
+  sizeBreakdown    Json? // {"36":1,"37":2}
 
   // Recalculados cada vez que cambia el pedido (ver finance-calc.ts)
-  factoryCostClp    Float              @default(0)
-  allocatedExtraClp Float              @default(0)
-  landedUnitCostClp Float              @default(0)
+  factoryCostClp    Float @default(0)
+  allocatedExtraClp Float @default(0)
+  landedUnitCostClp Float @default(0)
 
-  importKey         String?            @unique
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  importKey String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  order             ImportOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order ImportOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([modelKey])
@@ -325,20 +325,20 @@ model ProductCostLink {
   id          String          @id @default(uuid())
   productId   String          @unique
   modelKey    String
-  unitCost    Float           // Promedio ponderado de landedUnitCostClp
+  unitCost    Float // Promedio ponderado de landedUnitCostClp
   method      String          @default("WEIGHTED_AVERAGE")
   matchSource CostMatchSource @default(AUTO)
   updatedAt   DateTime        @updatedAt
 
-  product     Product         @relation(fields: [productId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([modelKey])
 }
 
 model Expense {
   id             String          @id @default(uuid())
-  date           DateTime        // Fecha del documento
-  period         String          // "YYYY-MM" al que se imputa
+  date           DateTime // Fecha del documento
+  period         String // "YYYY-MM" al que se imputa
   category       ExpenseCategory
   kind           ExpenseKind     @default(FIXED)
   supplier       String?
@@ -348,7 +348,7 @@ model Expense {
   paymentMethod  String?
   documentUrl    String?
   notes          String?
-  amortizeMonths Int?            // Ej. canon: se muestra prorrateado en el resultado
+  amortizeMonths Int? // Ej. canon: se muestra prorrateado en el resultado
   importKey      String?         @unique
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -374,4 +374,37 @@ model CashBalance {
   amount    Float
   notes     String?
   createdAt DateTime @default(now())
+}
+
+// Venta mayorista (Paris, Falabella): factura fuera del POS. Los pares salen de los pedidos
+// de importación ya registrados; el costo de ventas usa el promedio ponderado del modelo.
+model WholesaleSale {
+  id            String              @id @default(uuid())
+  customer      String
+  invoiceNumber String
+  date          DateTime // Fecha de emisión de la factura
+  period        String // "YYYY-MM" en que se reconoce el ingreso
+  vatAmount     Float               @default(0)
+  documentUrl   String?
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  lines         WholesaleSaleLine[]
+
+  @@unique([customer, invoiceNumber])
+  @@index([period])
+}
+
+model WholesaleSaleLine {
+  id           String        @id @default(uuid())
+  saleId       String
+  sale         WholesaleSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  description  String // Texto de la factura
+  modelKey     String // Modelo de importación del que salen los pares
+  quantity     Int
+  unitPriceNet Float // Precio unitario neto (sin IVA)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([saleId])
 }

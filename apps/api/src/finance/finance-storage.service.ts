@@ -42,7 +42,7 @@ export class FinanceStorageService {
     return { url, key };
   }
 
-  async upload(folder: 'costos' | 'gastos', file: UploadedDocument): Promise<string> {
+  async upload(folder: 'costos' | 'gastos' | 'mayoristas', file: UploadedDocument): Promise<string> {
     if (!file?.buffer?.length) throw new BadRequestException('Archivo vacío');
     if (file.size > MAX_DOCUMENT_BYTES) throw new BadRequestException('El archivo supera 15 MB');
     if (!ALLOWED_MIME.has(file.mimetype)) {

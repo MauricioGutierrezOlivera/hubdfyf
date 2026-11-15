@@ -7,7 +7,7 @@ Especificación funcional y técnica. Objetivo: medir el resultado real del nego
 2. **La mercadería no es gasto al pagarla.** Al llegar un pedido entra a inventario valorizado; pasa a costo solo cuando se vende (costo de ventas).
 3. **Cada peso se cuenta una vez.** Aportes de capital de los socios = inversión (no ingreso). Cuotas de créditos personales con que se financiaron los aportes = NO son gasto del negocio. Intereses de esos créditos se registran como "Costo financiero" en categoría aparte, mostrado bajo el resultado operacional.
 4. **Inversión de apertura (obra, muebles, letrero, garantía) = CAPEX**, separada del gasto operacional mensual.
-5. Ventas de Paris y Falabella (mayorista) quedan FUERA del módulo por ahora.
+5. Ventas de Paris y Falabella (mayorista) no están en el POS: se registran en **Ventas mayoristas** (ver más abajo) y sí cuentan en el resultado.
 
 ## Modelo de datos (Prisma, solo tablas nuevas; no modificar tablas existentes salvo agregar campos opcionales)
 
@@ -105,7 +105,7 @@ La API valida el rol en cada ruta con el header `x-user-id` (mismo mecanismo que
 - **Amortización:** cualquier gasto con `amortizeMonths` se reparte en partes iguales desde su período.
 
 ### Endpoints (`/finance`, todos solo Administrador)
-`GET/POST /orders`, `GET/PATCH/DELETE /orders/:id`, `POST /orders/:id/costs`, `PATCH/DELETE /costs/:id`, `POST|GET /costs/:id/document`, `POST /orders/:id/items`, `PATCH/DELETE /items/:id`, `GET /product-costs`, `POST /product-costs/assign|unassign|recompute`, `GET/POST /expenses` (`?from=&to=&category=`), `POST /expenses/duplicate-fixed`, `PATCH/DELETE /expenses/:id`, `POST|GET /expenses/:id/document`, `GET/POST /contributions`, `PATCH/DELETE /contributions/:id`, `GET/POST /cash`, `DELETE /cash/:id`, `GET /monthly?from=YYYY-MM&to=YYYY-MM`, `GET /summary`.
+`GET/POST /orders`, `GET/PATCH/DELETE /orders/:id`, `POST /orders/:id/costs`, `PATCH/DELETE /costs/:id`, `POST|GET /costs/:id/document`, `POST /orders/:id/items`, `PATCH/DELETE /items/:id`, `GET /product-costs`, `POST /product-costs/assign|unassign|recompute`, `GET/POST /expenses` (`?from=&to=&category=`), `POST /expenses/duplicate-fixed`, `PATCH/DELETE /expenses/:id`, `POST|GET /expenses/:id/document`, `GET/POST /contributions`, `PATCH/DELETE /contributions/:id`, `GET/POST /cash`, `DELETE /cash/:id`, `GET/POST /wholesale`, `PATCH/DELETE /wholesale/:id`, `POST|GET /wholesale/:id/document`, `GET /monthly?from=YYYY-MM&to=YYYY-MM`, `GET /summary`.
 
 ### Documentos
 Bucket privado `finanzas-documentos` (proyecto Supabase `ardbkecvixlqufswdcoa`). Se guarda la ruta interna y se abren con un link firmado de 10 minutos. Variables de la API: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (solo servidor). PDF, imagen o Excel, hasta 15 MB.
@@ -119,3 +119,11 @@ Es idempotente: actualiza las filas `csv:*`, borra las que ya no están en el CS
 2. Aplicar `apps/api/prisma/sql/20261114_modulo_finanzas.sql` en la base de producción. Hacerlo **antes** del deploy, porque el build de la API ejecuta `prisma db push` y crearía las tablas sin RLS.
 3. Deploy de la API y de la web.
 4. Cargar los CSV con `--apply --allow-remote`.
+
+### Ventas mayoristas (2026-11-15)
+- Tablas `WholesaleSale` (cliente, N° factura único por cliente, fecha, período, IVA informativo, PDF) y `WholesaleSaleLine` (texto de la factura, `modelKey`, pares, precio unitario neto). SQL: `apps/api/prisma/sql/20261115_ventas_mayoristas.sql` (solo crea tablas, con RLS).
+- Los pares salen de los pedidos de importación ya registrados: **no es un gasto nuevo**. En el mes de la factura suma la venta neta y su costo de ventas (promedio ponderado vigente del `modelKey`), igual que una venta de tienda.
+- En el Resultado aparecen como líneas aparte (Tiendas / Mayoristas). Los **pares de equilibrio y el margen por par usan solo tiendas**, porque las compras mayoristas son esporádicas y con otro margen.
+- No se registran como ventas `RETAIL` en el POS para no tocar ventas ni stock del POS. Las ventas `RETAIL` del POS siguen excluidas (hoy no hay ninguna).
+- Paris: facturas N°38 (FW26, 21-05-2026) y N°43 y N°44 (SS26, 07-10-2026). En la N°44, "Lirio Pink" = Lirio Topos.
+
